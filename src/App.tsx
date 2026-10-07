@@ -1,130 +1,143 @@
 import { useEffect, useState } from "react";
-import type { LucideIcon } from "lucide-react";
-import {
-  ArrowDown,
-  ArrowDownToLine,
-  ArrowUp,
-  ArrowUpFromLine,
-  Check,
-  FolderOpen,
-  GitBranch,
-  GitFork,
-  Loader2,
-  Monitor,
-  Moon,
-  RefreshCw,
-  Sun,
-} from "lucide-react";
+import { FolderGit2, FolderOpen, GitFork, Monitor, Moon, Plus, Sun, X } from "lucide-react";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
-import { Badge } from "@/components/ui/badge";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Kbd } from "@/components/ui/kbd";
-import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { Toaster } from "@/components/ui/sonner";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { AnimatedShinyText } from "@/components/ui/animated-shiny-text";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { DotPattern } from "@/components/ui/dot-pattern";
 import { ShimmerButton } from "@/components/ui/shimmer-button";
-import { BranchDialog } from "@/components/BranchDialog";
-import { CommitDetails } from "@/components/CommitDetails";
-import { History } from "@/components/History";
-import { Sidebar } from "@/components/Sidebar";
-import { WorkingTree } from "@/components/WorkingTree";
-import { useRepo } from "@/hooks/use-repo";
+import { RepoView } from "@/components/RepoView";
 import { useTheme, type ThemeMode } from "@/hooks/use-theme";
 import { git } from "@/lib/git";
+import { cn } from "@/lib/utils";
 
+type Tabs = { paths: string[]; active: string | null };
+
+const TABS_KEY = "will-repo.tabs";
+const RECENT_KEY = "will-repo.recent";
+
+function load<T>(key: string, fallback: T): T {
+  try {
+    const raw = localStorage.getItem(key);
+    if (raw) return JSON.parse(raw) as T;
+    // older versions stored only the last repo
+    const last = key === TABS_KEY && localStorage.getItem("will-repo.lastRepo");
+    if (last) return { paths: [last], active: last } as T;
+  } catch {}
+  return fallback;
+}
+
+function save(key: string, value: unknown) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch {}
+}
+
+const baseName = (path: string) => path.split(/[\\/]/).filter(Boolean).pop() ?? path;
+
+// Shell: tab bar + one RepoView per tab (like a TPageControl with a frame per page)
 export default function App() {
   const [theme, setTheme] = useTheme();
-  const { repo, data, busy, open, run, reload } = useRepo();
-  const [selectedHash, setSelectedHash] = useState<string | null>(null);
-  const [tab, setTab] = useState("details");
+  const [tabs, setTabs] = useState<Tabs>(() => load(TABS_KEY, { paths: [], active: null }));
+  const [recent, setRecent] = useState<string[]>(() => load(RECENT_KEY, []));
 
-  const commits = data?.commits ?? [];
-  // Keep the selection by hash so a reload doesn't jump to another commit
-  const selected = Math.max(0, commits.findIndex((c) => c.hash === selectedHash));
-  const changes = data ? data.status.staged.length + data.status.unstaged.length : 0;
+  useEffect(() => save(TABS_KEY, tabs), [tabs]);
+  useEffect(() => save(RECENT_KEY, recent), [recent]);
+
+  const openRepo = async (dir: string) => {
+    try {
+      const { path } = await git.openRepo(dir); // validates and returns the repo root
+      setTabs((t) => ({ paths: t.paths.includes(path) ? t.paths : [...t.paths, path], active: path }));
+      setRecent((r) => [path, ...r.filter((p) => p !== path)].slice(0, 10));
+    } catch (e) {
+      toast.error(String(e));
+    }
+  };
 
   const pickFolder = async () => {
     const dir = await openDialog({ directory: true, title: "Abrir repositório git" });
-    if (typeof dir === "string") open(dir);
+    if (typeof dir === "string") openRepo(dir);
   };
 
-  const fetch = () => run("fetch", git.fetch, "Fetch concluído");
-  const pull = () => run("pull", git.pull, "Pull concluído");
-  const push = () => run("push", git.push, "Push concluído");
+  const close = (path: string) =>
+    setTabs((t) => {
+      const i = t.paths.indexOf(path);
+      const paths = t.paths.filter((p) => p !== path);
+      const active = t.active === path ? (paths[Math.min(i, paths.length - 1)] ?? null) : t.active;
+      return { paths, active };
+    });
 
-  // Keyboard shortcuts (like TActionList shortcuts in Delphi)
+  // Ctrl+O open, Ctrl+T new tab, Ctrl+W close tab, Ctrl+Tab next tab
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (!e.ctrlKey || e.shiftKey) return;
       const k = e.key.toLowerCase();
-      if (e.ctrlKey && !e.shiftKey && k === "o") {
-        e.preventDefault();
-        pickFolder();
-      } else if (e.key === "F5") {
-        e.preventDefault();
-        reload();
-      } else if (e.ctrlKey && e.shiftKey && repo && !busy) {
-        const action = { f: fetch, l: pull, p: push }[k];
-        if (action) {
-          e.preventDefault();
-          action();
-        }
-      }
+      if (k === "o") pickFolder();
+      else if (k === "t") setTabs((t) => ({ ...t, active: null }));
+      else if (k === "w" && tabs.active) close(tabs.active);
+      else if (e.key === "Tab" && tabs.paths.length > 1) {
+        const i = tabs.active ? tabs.paths.indexOf(tabs.active) : -1;
+        setTabs((t) => ({ ...t, active: t.paths[(i + 1) % t.paths.length] }));
+      } else return;
+      e.preventDefault();
     };
-    // Files may change outside the app (editor, terminal): refresh when the window gets focus
-    const onFocus = () => reload();
     window.addEventListener("keydown", onKey);
-    window.addEventListener("focus", onFocus);
-    return () => {
-      window.removeEventListener("keydown", onKey);
-      window.removeEventListener("focus", onFocus);
-    };
+    return () => window.removeEventListener("keydown", onKey);
   });
 
   return (
     <TooltipProvider delayDuration={300}>
       <Toaster theme={theme} position="bottom-right" richColors />
       <div className="flex h-full flex-col bg-background">
-        <header className="flex h-12 shrink-0 items-center gap-4 border-b bg-card px-3">
-          <div className="flex min-w-0 items-center gap-2">
-            <div className="grid size-7 shrink-0 place-items-center rounded-md bg-primary/15 text-primary shadow-[0_0_14px_var(--glow)]">
-              <GitFork className="size-4" />
-            </div>
-            <span className="truncate font-semibold" title={repo?.path}>
-              {repo?.name ?? "will-repo"}
-            </span>
-            {data?.refs.head && (
-              <Badge className="gap-1 font-mono">
-                <GitBranch /> {data.refs.head}
-              </Badge>
-            )}
+        <nav className="flex h-10 shrink-0 items-end gap-1 border-b bg-sidebar px-2">
+          <div className="mr-2 mb-1.5 grid size-7 shrink-0 place-items-center self-center rounded-md bg-primary/15 text-primary shadow-[0_0_14px_var(--glow)]">
+            <GitFork className="size-4" />
           </div>
-
-          <div className="flex items-center gap-1">
-            <ToolbarButton icon={FolderOpen} label="Abrir" keys={["Ctrl", "O"]} onClick={pickFolder} />
-            {repo && (
-              <>
-                <ToolbarButton icon={RefreshCw} label="Fetch" keys={["Ctrl", "Shift", "F"]} onClick={fetch} busy={busy} id="fetch" />
-                <ToolbarButton icon={ArrowDownToLine} label="Pull" keys={["Ctrl", "Shift", "L"]} onClick={pull} busy={busy} id="pull" />
-                <ToolbarButton icon={ArrowUpFromLine} label="Push" keys={["Ctrl", "Shift", "P"]} onClick={push} busy={busy} id="push" />
-                <BranchDialog
-                  disabled={!!busy}
-                  onCreate={(name, checkout) =>
-                    run("branch", (p) => git.createBranch(p, name, checkout), `Branch ${name} criada`)
-                  }
-                />
-              </>
-            )}
+          <div className="flex min-w-0 items-end gap-1 overflow-x-auto">
+            {tabs.paths.map((p) => (
+              <div
+                key={p}
+                title={p}
+                onClick={() => setTabs((t) => ({ ...t, active: p }))}
+                onAuxClick={(e) => e.button === 1 && close(p)}
+                className={cn(
+                  "group flex h-8 max-w-52 shrink-0 cursor-pointer items-center gap-2 rounded-t-md border border-b-0 border-transparent px-3 text-muted-foreground hover:text-foreground",
+                  p === tabs.active && "border-border bg-card text-foreground shadow-[inset_0_2px_0_var(--primary)]",
+                )}
+              >
+                <FolderGit2 className="size-3.5 shrink-0" />
+                <span className="truncate">{baseName(p)}</span>
+                <button
+                  aria-label={`Fechar ${baseName(p)}`}
+                  className="rounded p-0.5 opacity-0 group-hover:opacity-100 hover:bg-muted"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    close(p);
+                  }}
+                >
+                  <X className="size-3" />
+                </button>
+              </div>
+            ))}
           </div>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            className="mb-1 shrink-0"
+            aria-label="Nova aba"
+            title="Nova aba (Ctrl+T)"
+            onClick={() => setTabs((t) => ({ ...t, active: null }))}
+          >
+            <Plus />
+          </Button>
 
           <ToggleGroup
             type="single"
             size="sm"
             variant="outline"
-            className="ml-auto"
+            className="mb-1 ml-auto self-center"
             value={theme}
             onValueChange={(v) => v && setTheme(v as ThemeMode)}
           >
@@ -146,150 +159,73 @@ export default function App() {
               </ToggleGroupItem>
             ))}
           </ToggleGroup>
-        </header>
+        </nav>
 
-        {!repo || !data ? (
-          <EmptyState loading={!!repo} onOpen={pickFolder} />
+        {tabs.active ? (
+          // key = path: switching tabs mounts a fresh view with its own state
+          <RepoView key={tabs.active} path={tabs.active} />
         ) : (
-          <ResizablePanelGroup orientation="horizontal" className="min-h-0 flex-1">
-            <ResizablePanel defaultSize="18" minSize={180}>
-              <Sidebar
-                refs={data.refs}
-                onCheckout={(name, remote) => run("checkout", (p) => git.checkout(p, name, remote), `Checkout em ${name}`)}
-              />
-            </ResizablePanel>
-            <ResizableHandle />
-
-            <ResizablePanel defaultSize="50" minSize={360}>
-              <History
-                commits={commits}
-                selected={selected}
-                onSelect={(i) => {
-                  setSelectedHash(commits[i].hash);
-                  setTab("details");
-                }}
-              />
-            </ResizablePanel>
-            <ResizableHandle />
-
-            <ResizablePanel defaultSize="32" minSize={340}>
-              <Tabs value={tab} onValueChange={setTab} className="flex h-full flex-col gap-0 bg-card">
-                <div className="border-b p-2">
-                  <TabsList>
-                    <TabsTrigger value="details">Detalhes</TabsTrigger>
-                    <TabsTrigger value="changes" className="gap-1.5">
-                      Alterações
-                      {changes > 0 && <Badge className="h-4 min-w-4 px-1 text-[10px]">{changes}</Badge>}
-                    </TabsTrigger>
-                  </TabsList>
-                </div>
-                <TabsContent value="details" className="flex min-h-0 flex-col">
-                  {commits[selected] ? (
-                    <CommitDetails repo={repo.path} commit={commits[selected]} />
-                  ) : (
-                    <p className="p-4 text-muted-foreground">Nenhum commit ainda.</p>
-                  )}
-                </TabsContent>
-                <TabsContent value="changes" className="flex min-h-0 flex-col">
-                  <WorkingTree repo={repo.path} status={data.status} run={run} />
-                </TabsContent>
-              </Tabs>
-            </ResizablePanel>
-          </ResizablePanelGroup>
+          <Home recent={recent} onOpen={openRepo} onPick={pickFolder} onForget={(p) => setRecent((r) => r.filter((x) => x !== p))} />
         )}
-
-        <footer className="flex h-7 shrink-0 items-center gap-4 border-t bg-card px-3 text-xs text-muted-foreground">
-          {data && (
-            <>
-              <span className="flex items-center gap-1">
-                <GitBranch className="size-3.5" /> {data.refs.head ?? "HEAD destacado"}
-              </span>
-              {data.tracking.upstream ? (
-                <>
-                  <span className="flex items-center gap-2" title={`Comparado com ${data.tracking.upstream}`}>
-                    <span className="flex items-center">
-                      <ArrowUp className="size-3.5" />
-                      {data.tracking.ahead}
-                    </span>
-                    <span className="flex items-center">
-                      <ArrowDown className="size-3.5" />
-                      {data.tracking.behind}
-                    </span>
-                  </span>
-                  {data.tracking.ahead === 0 && data.tracking.behind === 0 && (
-                    <AnimatedShinyText className="mx-0 flex items-center gap-1 text-xs">
-                      <Check className="size-3.5" /> Sincronizado com {data.tracking.upstream}
-                    </AnimatedShinyText>
-                  )}
-                </>
-              ) : (
-                <span>Sem upstream</span>
-              )}
-            </>
-          )}
-          {busy && (
-            <span className="ml-auto flex items-center gap-1 text-primary">
-              <Loader2 className="size-3.5 animate-spin" /> {busy}...
-            </span>
-          )}
-        </footer>
       </div>
     </TooltipProvider>
   );
 }
 
-type ToolbarButtonProps = {
-  icon: LucideIcon;
-  label: string;
-  keys: string[];
-  onClick: () => void;
-  busy?: string | null;
-  id?: string;
+type HomeProps = {
+  recent: string[];
+  onOpen: (path: string) => void;
+  onPick: () => void;
+  onForget: (path: string) => void;
 };
 
-function ToolbarButton({ icon: Icon, label, keys, onClick, busy, id }: ToolbarButtonProps) {
-  const spinning = !!id && busy === id;
+function Home({ recent, onOpen, onPick, onForget }: HomeProps) {
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <Button variant="ghost" size="sm" className="text-muted-foreground" disabled={!!busy} onClick={onClick}>
-          {spinning ? <Loader2 className="animate-spin" /> : <Icon />} {label}
-        </Button>
-      </TooltipTrigger>
-      <TooltipContent className="flex items-center gap-1">
-        {keys.map((k) => (
-          <Kbd key={k}>{k}</Kbd>
-        ))}
-      </TooltipContent>
-    </Tooltip>
-  );
-}
-
-function EmptyState({ loading, onOpen }: { loading: boolean; onOpen: () => void }) {
-  return (
-    <div className="relative flex flex-1 flex-col items-center justify-center gap-4 overflow-hidden">
-      <DotPattern className="text-primary/25 [mask-image:radial-gradient(360px_circle_at_center,white,transparent)]" />
-      {loading ? (
-        <Loader2 className="relative size-6 animate-spin text-primary" />
-      ) : (
-        <>
-          <div className="relative grid size-14 place-items-center rounded-xl bg-primary/15 text-primary shadow-[0_0_24px_var(--glow)]">
-            <GitFork className="size-7" />
-          </div>
-          <div className="relative text-center">
-            <h1 className="text-lg font-semibold">Nenhum repositório aberto</h1>
-            <p className="text-muted-foreground">Escolha uma pasta com um repositório git.</p>
-          </div>
-          <ShimmerButton
-            background="var(--primary)"
-            borderRadius="8px"
-            shimmerColor="#c4b5ff"
-            className="h-9 gap-2 px-4 text-sm font-medium"
-            onClick={onOpen}
-          >
-            <FolderOpen className="size-4" /> Abrir repositório
-          </ShimmerButton>
-        </>
+    <div className="relative flex flex-1 flex-col items-center justify-center gap-6 overflow-hidden p-6">
+      <DotPattern className="text-primary/25 [mask-image:radial-gradient(420px_circle_at_center,white,transparent)]" />
+      <div className="relative grid size-14 place-items-center rounded-xl bg-primary/15 text-primary shadow-[0_0_24px_var(--glow)]">
+        <GitFork className="size-7" />
+      </div>
+      <div className="relative text-center">
+        <h1 className="text-lg font-semibold">Abrir um repositório</h1>
+        <p className="text-muted-foreground">Escolha uma pasta com git ou um repositório recente.</p>
+      </div>
+      <ShimmerButton
+        background="var(--primary)"
+        borderRadius="8px"
+        shimmerColor="#c4b5ff"
+        className="relative h-9 gap-2 px-4 text-sm font-medium"
+        onClick={onPick}
+      >
+        <FolderOpen className="size-4" /> Abrir pasta (Ctrl+O)
+      </ShimmerButton>
+      {recent.length > 0 && (
+        <div className="relative w-full max-w-md rounded-lg border bg-card p-2">
+          <h3 className="px-2 pb-1 text-[11px] font-semibold tracking-wider text-muted-foreground/70 uppercase">Recentes</h3>
+          {recent.map((p) => (
+            <div
+              key={p}
+              onClick={() => onOpen(p)}
+              className="group flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 hover:bg-muted"
+            >
+              <FolderGit2 className="size-4 shrink-0 text-primary" />
+              <div className="min-w-0 flex-1">
+                <div className="truncate font-medium">{baseName(p)}</div>
+                <div className="truncate text-xs text-muted-foreground">{p}</div>
+              </div>
+              <button
+                aria-label="Remover dos recentes"
+                className="rounded p-1 opacity-0 group-hover:opacity-100 hover:bg-background"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onForget(p);
+                }}
+              >
+                <X className="size-3.5" />
+              </button>
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );

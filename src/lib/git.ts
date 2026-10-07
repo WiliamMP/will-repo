@@ -18,12 +18,22 @@ export type Commit = {
 export type Refs = { head: string | null; branches: string[]; remotes: string[]; tags: string[] };
 
 export type FileChange = { path: string; status: string; add: number; del: number };
-export type Status = { staged: FileChange[]; unstaged: FileChange[] };
+export type Status = { staged: FileChange[]; unstaged: FileChange[]; conflicted: FileChange[] };
 export type Tracking = { upstream: string | null; ahead: number; behind: number };
 export type RepoInfo = { path: string; name: string };
+export type Stash = { name: string; message: string; timestamp: number };
+export type StashAction = "apply" | "pop" | "drop";
+export type HunkAction = "stage" | "unstage" | "discard";
+export type Choice = "ours" | "theirs" | "both";
+export type OpAction = "continue" | "abort" | "skip";
+export type RepoState = {
+  kind: "merge" | "rebase" | "cherry-pick" | "revert" | null;
+  label: string;
+  step: string | null;
+};
 
 export type DiffLine = {
-  kind: "hunk" | "ctx" | "add" | "del" | "info";
+  kind: "hunk" | "ctx" | "add" | "del" | "info" | "marker" | "ours" | "base" | "theirs";
   old: number | null;
   new: number | null;
   text: string;
@@ -31,10 +41,12 @@ export type DiffLine = {
 
 export const git = {
   openRepo: (path: string) => invoke<RepoInfo>("open_repo", { path }),
-  log: (repo: string) => invoke<Commit[]>("log", { repo }),
+  log: (repo: string, limit: number) => invoke<Commit[]>("log", { repo, limit }),
+  search: (repo: string, query: string) => invoke<Commit[]>("search", { repo, query }),
   refs: (repo: string) => invoke<Refs>("refs", { repo }),
   status: (repo: string) => invoke<Status>("status", { repo }),
   tracking: (repo: string) => invoke<Tracking>("tracking", { repo }),
+  state: (repo: string) => invoke<RepoState>("repo_state", { repo }),
   commitFiles: (repo: string, hash: string) => invoke<FileChange[]>("commit_files", { repo, hash }),
   commitDiff: (repo: string, hash: string, file: string) => invoke<DiffLine[]>("commit_diff", { repo, hash, file }),
   workingDiff: (repo: string, file: FileChange, staged: boolean) =>
@@ -48,6 +60,22 @@ export const git = {
   push: (repo: string) => invoke<void>("push", { repo }),
   checkout: (repo: string, branch: string, remote: boolean) => invoke<void>("checkout", { repo, branch, remote }),
   createBranch: (repo: string, name: string, checkout: boolean) => invoke<void>("create_branch", { repo, name, checkout }),
+  deleteBranch: (repo: string, name: string, force: boolean) => invoke<void>("delete_branch", { repo, name, force }),
+  merge: (repo: string, branch: string) => invoke<void>("merge", { repo, branch }),
+  rebase: (repo: string, onto: string) => invoke<void>("rebase", { repo, onto }),
+  operation: (repo: string, action: OpAction) => invoke<void>("operation", { repo, action }),
+  conflictView: (repo: string, file: string) => invoke<DiffLine[]>("conflict_view", { repo, file }),
+  resolveBlock: (repo: string, file: string, block: number, choice: Choice) =>
+    invoke<void>("resolve_conflict_block", { repo, file, block, choice }),
+  resolveFile: (repo: string, file: string, choice: Choice) => invoke<void>("resolve_file", { repo, file, choice }),
+  stashList: (repo: string) => invoke<Stash[]>("stash_list", { repo }),
+  stashPush: (repo: string, message: string, untracked: boolean) => invoke<void>("stash_push", { repo, message, untracked }),
+  stashAction: (repo: string, name: string, action: StashAction) => invoke<void>("stash_action", { repo, name, action }),
+  stashFiles: (repo: string, name: string) => invoke<FileChange[]>("stash_files", { repo, name }),
+  stashDiff: (repo: string, name: string, file: string) => invoke<DiffLine[]>("stash_diff", { repo, name, file }),
+  /** `lines` = body line indexes inside the hunk; omit to apply the whole hunk */
+  applyHunk: (repo: string, file: string, hunk: number, action: HunkAction, lines?: number[]) =>
+    invoke<void>("apply_hunk", { repo, file, hunk, action, lines: lines ?? null }),
 };
 
 const rtf = new Intl.RelativeTimeFormat("pt-BR", { numeric: "auto" });

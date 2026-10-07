@@ -6,6 +6,7 @@ const STATUS_COLOR: Record<string, string> = {
   A: "text-success",
   "?": "text-success",
   D: "text-destructive",
+  U: "text-destructive",
 };
 
 type Props = {
