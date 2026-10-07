@@ -32,6 +32,20 @@ export type RepoState = {
   step: string | null;
 };
 
+export type UserInfo = { name: string | null; email: string | null };
+export type RepoSummary = {
+  path: string;
+  name: string;
+  head: string | null;
+  lastCommit: { subject: string; author: string; timestamp: number } | null;
+  totalCommits: number;
+  changes: number;
+  ahead: number;
+  behind: number;
+  /** unix times of the user's commits in the last year */
+  myCommits: number[];
+};
+
 export type DiffLine = {
   kind: "hunk" | "ctx" | "add" | "del" | "info" | "marker" | "ours" | "base" | "theirs";
   old: number | null;
@@ -41,6 +55,8 @@ export type DiffLine = {
 
 export const git = {
   openRepo: (path: string) => invoke<RepoInfo>("open_repo", { path }),
+  userInfo: () => invoke<UserInfo>("user_info"),
+  repoSummary: (repo: string, email: string | null) => invoke<RepoSummary>("repo_summary", { repo, email }),
   log: (repo: string, limit: number) => invoke<Commit[]>("log", { repo, limit }),
   search: (repo: string, query: string) => invoke<Commit[]>("search", { repo, query }),
   refs: (repo: string) => invoke<Refs>("refs", { repo }),

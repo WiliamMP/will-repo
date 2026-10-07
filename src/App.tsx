@@ -1,13 +1,12 @@
-import { useEffect, useState } from "react";
-import { FolderGit2, FolderOpen, GitFork, Monitor, Moon, Plus, Sun, X } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { FolderGit2, GitFork, Monitor, Moon, Plus, Sun, X } from "lucide-react";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Toaster } from "@/components/ui/sonner";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { DotPattern } from "@/components/ui/dot-pattern";
-import { ShimmerButton } from "@/components/ui/shimmer-button";
+import { Dashboard } from "@/components/Dashboard";
 import { RepoView } from "@/components/RepoView";
 import { useTheme, type ThemeMode } from "@/hooks/use-theme";
 import { git } from "@/lib/git";
@@ -45,6 +44,14 @@ export default function App() {
 
   useEffect(() => save(TABS_KEY, tabs), [tabs]);
   useEffect(() => save(RECENT_KEY, recent), [recent]);
+
+  // Projects on the dashboard: open tabs first, then recent ones. Memoized so the
+  // dashboard only reloads when the list really changes.
+  const dashboardRepos = useMemo(
+    () => [...new Set([...tabs.paths, ...recent])],
+    // join() turns the arrays into strings, which React compares by value
+    [tabs.paths.join("|"), recent.join("|")],
+  );
 
   const openRepo = async (dir: string) => {
     try {
@@ -92,9 +99,17 @@ export default function App() {
       <Toaster theme={theme} position="bottom-right" richColors />
       <div className="flex h-full flex-col bg-background">
         <nav className="flex h-10 shrink-0 items-end gap-1 border-b bg-sidebar px-2">
-          <div className="mr-2 mb-1.5 grid size-7 shrink-0 place-items-center self-center rounded-md bg-primary/15 text-primary shadow-[0_0_14px_var(--glow)]">
+          <button
+            aria-label="Dashboard"
+            title="Dashboard"
+            onClick={() => setTabs((t) => ({ ...t, active: null }))}
+            className={cn(
+              "mr-2 grid size-7 shrink-0 place-items-center self-center rounded-md bg-primary/15 text-primary transition-shadow hover:shadow-[0_0_18px_var(--glow)]",
+              tabs.active === null && "bg-primary text-primary-foreground shadow-[0_0_14px_var(--glow)]",
+            )}
+          >
             <GitFork className="size-4" />
-          </div>
+          </button>
           <div className="flex min-w-0 items-end gap-1 overflow-x-auto">
             {tabs.paths.map((p) => (
               <div
@@ -127,7 +142,7 @@ export default function App() {
             size="icon-sm"
             className="mb-1 shrink-0"
             aria-label="Nova aba"
-            title="Nova aba (Ctrl+T)"
+            title="Nova aba: abre o dashboard (Ctrl+T)"
             onClick={() => setTabs((t) => ({ ...t, active: null }))}
           >
             <Plus />
@@ -165,68 +180,18 @@ export default function App() {
           // key = path: switching tabs mounts a fresh view with its own state
           <RepoView key={tabs.active} path={tabs.active} />
         ) : (
-          <Home recent={recent} onOpen={openRepo} onPick={pickFolder} onForget={(p) => setRecent((r) => r.filter((x) => x !== p))} />
+          <Dashboard
+            repos={dashboardRepos}
+            openTabs={tabs.paths}
+            onOpen={openRepo}
+            onPick={pickFolder}
+            onForget={(p) => {
+              setRecent((r) => r.filter((x) => x !== p));
+              close(p);
+            }}
+          />
         )}
       </div>
     </TooltipProvider>
-  );
-}
-
-type HomeProps = {
-  recent: string[];
-  onOpen: (path: string) => void;
-  onPick: () => void;
-  onForget: (path: string) => void;
-};
-
-function Home({ recent, onOpen, onPick, onForget }: HomeProps) {
-  return (
-    <div className="relative flex flex-1 flex-col items-center justify-center gap-6 overflow-hidden p-6">
-      <DotPattern className="text-primary/25 [mask-image:radial-gradient(420px_circle_at_center,white,transparent)]" />
-      <div className="relative grid size-14 place-items-center rounded-xl bg-primary/15 text-primary shadow-[0_0_24px_var(--glow)]">
-        <GitFork className="size-7" />
-      </div>
-      <div className="relative text-center">
-        <h1 className="text-lg font-semibold">Abrir um repositório</h1>
-        <p className="text-muted-foreground">Escolha uma pasta com git ou um repositório recente.</p>
-      </div>
-      <ShimmerButton
-        background="var(--primary)"
-        borderRadius="8px"
-        shimmerColor="#c4b5ff"
-        className="relative h-9 gap-2 px-4 text-sm font-medium"
-        onClick={onPick}
-      >
-        <FolderOpen className="size-4" /> Abrir pasta (Ctrl+O)
-      </ShimmerButton>
-      {recent.length > 0 && (
-        <div className="relative w-full max-w-md rounded-lg border bg-card p-2">
-          <h3 className="px-2 pb-1 text-[11px] font-semibold tracking-wider text-muted-foreground/70 uppercase">Recentes</h3>
-          {recent.map((p) => (
-            <div
-              key={p}
-              onClick={() => onOpen(p)}
-              className="group flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 hover:bg-muted"
-            >
-              <FolderGit2 className="size-4 shrink-0 text-primary" />
-              <div className="min-w-0 flex-1">
-                <div className="truncate font-medium">{baseName(p)}</div>
-                <div className="truncate text-xs text-muted-foreground">{p}</div>
-              </div>
-              <button
-                aria-label="Remover dos recentes"
-                className="rounded p-1 opacity-0 group-hover:opacity-100 hover:bg-background"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onForget(p);
-                }}
-              >
-                <X className="size-3.5" />
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
   );
 }

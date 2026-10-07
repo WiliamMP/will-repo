@@ -510,6 +510,88 @@ pub fn resolve_file(repo: String, file: String, choice: Choice) -> Res<()> {
     git(&repo, &["add", "--", &file]).map(drop)
 }
 
+// ---------- Dashboard ----------
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UserInfo {
+    name: Option<String>,
+    email: Option<String>,
+}
+
+/// Identity from the global git config (`git config --global user.name/email`)
+#[tauri::command(async)]
+pub fn user_info() -> Res<UserInfo> {
+    let get = |key: &str| {
+        git(".", &["config", "--global", "--get", key]).ok().map(|v| v.trim().to_string()).filter(|v| !v.is_empty())
+    };
+    Ok(UserInfo { name: get("user.name"), email: get("user.email") })
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LastCommit {
+    subject: String,
+    author: String,
+    timestamp: i64,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RepoSummary {
+    path: String,
+    name: String,
+    head: Option<String>,
+    last_commit: Option<LastCommit>,
+    total_commits: u32,
+    changes: usize,
+    ahead: u32,
+    behind: u32,
+    /// Unix times of the user's commits in the last year (all branches)
+    my_commits: Vec<i64>,
+}
+
+/// Everything a project card on the dashboard needs, in one call
+#[tauri::command(async)]
+pub fn repo_summary(repo: String, email: Option<String>) -> Res<RepoSummary> {
+    let info = open_repo(repo.clone())?;
+    let refs = refs(info.path.clone())?;
+    let st = status(info.path.clone())?;
+    let tr = tracking(info.path.clone())?;
+
+    let last = git(&info.path, &["log", "-1", &format!("--format=%s{FS}%an{FS}%at")]).unwrap_or_default();
+    let mut f = last.trim().split(FS);
+    let last_commit = match (f.next(), f.next(), f.next()) {
+        (Some(s), Some(a), Some(t)) if !s.is_empty() => {
+            Some(LastCommit { subject: s.into(), author: a.into(), timestamp: t.parse().unwrap_or(0) })
+        }
+        _ => None,
+    };
+    // an empty repo has no HEAD: count is 0
+    let total_commits = git(&info.path, &["rev-list", "--all", "--count"]).ok().and_then(|n| n.trim().parse().ok()).unwrap_or(0);
+
+    let my_commits = match email.as_deref().filter(|e| !e.is_empty()) {
+        Some(e) => git(&info.path, &["log", "--all", "--since=1.year", "--fixed-strings", &format!("--author={e}"), "--format=%at"])
+            .unwrap_or_default()
+            .lines()
+            .filter_map(|t| t.parse().ok())
+            .collect(),
+        None => vec![],
+    };
+
+    Ok(RepoSummary {
+        path: info.path,
+        name: info.name,
+        head: refs.head,
+        last_commit,
+        total_commits,
+        changes: st.staged.len() + st.unstaged.len() + st.conflicted.len(),
+        ahead: tr.ahead,
+        behind: tr.behind,
+        my_commits,
+    })
+}
+
 // ---------- Stash ----------
 
 #[tauri::command(async)]
@@ -869,6 +951,19 @@ mod tests {
         git(&repo, &["switch", "-q", "main"]).unwrap();
         assert!(delete_branch(r(), "feature".into(), false).is_err());
         delete_branch(r(), "feature".into(), true).unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn dashboard_summary() {
+        let (dir, repo) = temp_repo("summary");
+        std::fs::write(dir.join("g.txt"), "x\n").unwrap();
+        let s = repo_summary(repo.clone(), Some("t@t".into())).unwrap();
+        assert_eq!((s.total_commits, s.changes, s.head.as_deref()), (1, 1, Some("main")));
+        assert_eq!(s.last_commit.unwrap().subject, "base");
+        assert_eq!(s.my_commits.len(), 1);
+        assert!(repo_summary(repo.clone(), Some("ninguem@x".into())).unwrap().my_commits.is_empty());
+        assert!(user_info().is_ok());
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
