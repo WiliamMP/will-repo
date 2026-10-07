@@ -1,4 +1,5 @@
 mod git;
+mod github;
 mod parse;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -41,6 +42,10 @@ pub fn run() {
             git::resolve_file,
             git::user_info,
             git::repo_summary,
+            github::github_device_start,
+            github::github_device_poll,
+            github::github_logout,
+            github::github_profile,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

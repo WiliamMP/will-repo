@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   ArrowDown,
+  Copy,
+  HardDrive,
+  LogOut,
+  RefreshCw,
+  WifiOff,
   ArrowUp,
   FolderGit2,
   FolderOpen,
@@ -11,12 +16,25 @@ import {
   TriangleAlert,
   X,
 } from "lucide-react";
+import { openUrl } from "@tauri-apps/plugin-opener";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { BorderBeam } from "@/components/ui/border-beam";
 import { DotPattern } from "@/components/ui/dot-pattern";
 import { ShimmerButton } from "@/components/ui/shimmer-button";
-import { git, relativeDate, type RepoSummary, type UserInfo } from "@/lib/git";
+import { git, relativeDate, type DeviceCode, type GithubProfile, type RepoSummary, type UserInfo } from "@/lib/git";
 import { cn } from "@/lib/utils";
+
+/** GitHub mark (Octicons, MIT). lucide-react has no brand icons. */
+function Github({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden className={className ?? "size-4"}>
+      <path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z" />
+    </svg>
+  );
+}
 
 type Props = {
   /** open tabs first, then recent repos */
@@ -102,38 +120,255 @@ export function Dashboard({ repos, openTabs, onOpen, onPick, onForget }: Props) 
 
 // ---------- Profile ----------
 
+/** GitHub profile when logged in and online; otherwise local data (git config + local commits) */
+type GithubState =
+  | { kind: "loading" }
+  | { kind: "ok"; profile: GithubProfile }
+  | { kind: "not_logged" }
+  | { kind: "offline" }
+  | { kind: "error"; message: string };
+
+function useGithub() {
+  const [state, setState] = useState<GithubState>({ kind: "loading" });
+  const load = () => {
+    setState({ kind: "loading" });
+    git.githubProfile().then(
+      (profile) => setState({ kind: "ok", profile }),
+      (e) => {
+        const msg = String(e);
+        if (msg.startsWith("not_logged")) setState({ kind: "not_logged" });
+        else if (msg.startsWith("offline")) setState({ kind: "offline" });
+        else setState({ kind: "error", message: msg });
+      },
+    );
+  };
+  useEffect(load, []);
+  return [state, load] as const;
+}
+
+/** "2026-03-05" -> the same key countByDay uses (local date) */
+const isoToKey = (iso: string) => {
+  const [y, m, d] = iso.split("-").map(Number);
+  return dayKey(new Date(y, m - 1, d));
+};
+
 function ProfileCard({ user, commits, projects, loading }: { user: UserInfo | null; commits: number[]; projects: number; loading: boolean }) {
-  const days = useMemo(() => countByDay(commits), [commits]);
+  const [gh, reloadGh] = useGithub();
+  const [loginOpen, setLoginOpen] = useState(false);
+  const profile = gh.kind === "ok" ? gh.profile : null;
+
+  // Same heatmap and stats for both sources, only the day counts change
+  const days = useMemo(
+    () => (profile ? new Map(profile.days.filter(([, n]) => n > 0).map(([d, n]) => [isoToKey(d), n])) : countByDay(commits)),
+    [profile, commits],
+  );
   const stats = useMemo(() => streaks(days), [days]);
-  const weekAgo = Date.now() / 1000 - 7 * 86400;
+  const lastWeek = useMemo(() => {
+    let n = 0;
+    const d = new Date();
+    for (let i = 0; i < 7; i++, d.setDate(d.getDate() - 1)) n += days.get(dayKey(d)) ?? 0;
+    return n;
+  }, [days]);
+  const total = profile ? profile.totalContributions : commits.length;
+  const busy = profile ? false : loading || gh.kind === "loading";
+
+  const logout = async () => {
+    await git.githubLogout();
+    reloadGh();
+  };
 
   return (
     <section className="relative overflow-hidden rounded-xl border bg-card p-6 shadow-[0_0_40px_-12px_var(--glow)]">
       <BorderBeam size={120} duration={10} colorFrom="var(--primary)" colorTo="var(--lane-2)" />
       <div className="flex flex-wrap items-center gap-5">
-        <Avatar name={user?.name} email={user?.email} />
+        <Avatar name={profile?.name ?? user?.name} email={user?.email} url={profile?.avatarUrl} />
         <div className="min-w-0 flex-1">
-          <h1 className="truncate text-xl font-semibold">{user?.name ?? (user ? "Sem nome configurado" : "...")}</h1>
-          <p className="flex items-center gap-1.5 text-muted-foreground">
-            <Mail className="size-3.5" /> {user?.email ?? "sem email"}
-          </p>
-          {user && (!user.name || !user.email) && (
-            <p className="mt-1 text-xs text-warning">
-              Configure com <code>git config --global user.name "Seu Nome"</code> e <code>user.email</code>
-            </p>
+          <h1 className="truncate text-xl font-semibold">
+            {profile?.name ?? profile?.login ?? user?.name ?? (user ? "Sem nome configurado" : "...")}
+          </h1>
+          {profile ? (
+            <>
+              <button
+                className="flex items-center gap-1.5 text-muted-foreground hover:text-primary"
+                onClick={() => openUrl(profile.url)}
+              >
+                <Github className="size-3.5" /> @{profile.login}
+              </button>
+              {profile.bio && <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{profile.bio}</p>}
+              <p className="mt-1 flex flex-wrap gap-3 text-xs text-muted-foreground">
+                <span>
+                  <b className="text-foreground">{profile.followers}</b> seguidores
+                </span>
+                <span>
+                  <b className="text-foreground">{profile.following}</b> seguindo
+                </span>
+                <span>
+                  <b className="text-foreground">{profile.repositories}</b> repositórios
+                </span>
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="flex items-center gap-1.5 text-muted-foreground">
+                <Mail className="size-3.5" /> {user?.email ?? "sem email"}
+              </p>
+              {user && (!user.name || !user.email) && (
+                <p className="mt-1 text-xs text-warning">
+                  Configure com <code>git config --global user.name "Seu Nome"</code> e <code>user.email</code>
+                </p>
+              )}
+            </>
           )}
         </div>
         <div className="grid grid-cols-2 gap-x-8 gap-y-3 sm:grid-cols-4">
-          <Stat label="Contribuições no ano" value={commits.length} loading={loading} />
-          <Stat label="Últimos 7 dias" value={commits.filter((t) => t >= weekAgo).length} loading={loading} />
-          <Stat label="Sequência atual" value={stats.current} unit="dias" loading={loading} />
-          <Stat label="Maior sequência" value={stats.longest} unit="dias" loading={loading} />
+          <Stat label="Contribuições no ano" value={total} loading={busy} />
+          <Stat label="Últimos 7 dias" value={lastWeek} loading={busy} />
+          <Stat label="Sequência atual" value={stats.current} unit="dias" loading={busy} />
+          <Stat label="Maior sequência" value={stats.longest} unit="dias" loading={busy} />
         </div>
       </div>
+
       <div className="mt-6">
-        <Heatmap days={days} total={commits.length} projects={projects} />
+        <Heatmap
+          days={days}
+          caption={
+            profile
+              ? `${total} contribuições no GitHub no último ano`
+              : `${total} commits seus no último ano, em ${projects} projeto(s) local(is)`
+          }
+        />
       </div>
+
+      {/* where the data comes from + login/logout */}
+      <div className="mt-4 flex flex-wrap items-center gap-2 border-t pt-3 text-xs text-muted-foreground">
+        {gh.kind === "ok" && (
+          <>
+            <Github className="size-3.5" />
+            {gh.profile.source === "gh" ? "Conectado ao GitHub pelo gh CLI" : "Conectado ao GitHub"}
+            {gh.profile.source === "app" && (
+              <Button variant="ghost" size="xs" className="ml-auto" onClick={logout}>
+                <LogOut /> Sair
+              </Button>
+            )}
+          </>
+        )}
+        {gh.kind === "loading" && (
+          <>
+            <Loader2 className="size-3.5 animate-spin" /> Conectando ao GitHub...
+          </>
+        )}
+        {gh.kind === "not_logged" && (
+          <>
+            <HardDrive className="size-3.5" /> Dados locais (git config + commits dos projetos)
+            <Button size="xs" className="ml-auto" onClick={() => setLoginOpen(true)}>
+              <Github /> Entrar com GitHub
+            </Button>
+          </>
+        )}
+        {(gh.kind === "offline" || gh.kind === "error") && (
+          <>
+            {gh.kind === "offline" ? <WifiOff className="size-3.5" /> : <TriangleAlert className="size-3.5 text-warning" />}
+            {gh.kind === "offline" ? "Sem internet: mostrando dados locais" : gh.message}
+            <Button variant="ghost" size="xs" className="ml-auto" onClick={reloadGh}>
+              <RefreshCw /> Tentar de novo
+            </Button>
+          </>
+        )}
+      </div>
+
+      <GithubLogin
+        open={loginOpen}
+        onOpenChange={setLoginOpen}
+        onDone={() => {
+          setLoginOpen(false);
+          reloadGh();
+        }}
+      />
     </section>
+  );
+}
+
+/** Device Flow: show the code, open github.com/login/device, wait for the user to authorize */
+function GithubLogin({ open, onOpenChange, onDone }: { open: boolean; onOpenChange: (o: boolean) => void; onDone: () => void }) {
+  const [code, setCode] = useState<DeviceCode | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    let stop = false;
+    let timer: ReturnType<typeof setTimeout>;
+    setCode(null);
+    setError(null);
+
+    git.githubDeviceStart().then(
+      (c) => {
+        if (stop) return;
+        setCode(c);
+        let wait = c.interval * 1000;
+        // ask GitHub every `interval` seconds until the user authorizes (like a TTimer)
+        const poll = () =>
+          git.githubDevicePoll(c.deviceCode).then(
+            (r) => {
+              if (stop) return;
+              if (r === "done") return onDone();
+              if (r === "slow_down") wait += 5000;
+              timer = setTimeout(poll, wait);
+            },
+            (e) => !stop && setError(String(e)),
+          );
+        timer = setTimeout(poll, wait);
+      },
+      (e) => !stop && setError(String(e)),
+    );
+    return () => {
+      stop = true;
+      clearTimeout(timer);
+    };
+    // onDone is a new function each render; restart only when the dialog opens
+  }, [open]);
+
+  const copyAndOpen = async () => {
+    if (!code) return;
+    await navigator.clipboard.writeText(code.userCode);
+    toast.success("Código copiado");
+    openUrl(code.verificationUri);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-sm">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Github className="size-4" /> Entrar com GitHub
+          </DialogTitle>
+          <DialogDescription>Digite o código abaixo no GitHub e autorize o will-repo.</DialogDescription>
+        </DialogHeader>
+        {error ? (
+          <div className="flex flex-col gap-2 text-sm">
+            <p className="text-destructive">{error}</p>
+            <p className="text-muted-foreground">
+              Alternativa: rode <code>gh auth login</code> no terminal. O app usa o login do gh CLI automaticamente.
+            </p>
+          </div>
+        ) : !code ? (
+          <div className="flex justify-center py-6">
+            <Loader2 className="size-5 animate-spin text-primary" />
+          </div>
+        ) : (
+          <div className="flex flex-col items-center gap-4 py-2">
+            <code className="rounded-lg border bg-sidebar px-4 py-2 text-2xl font-semibold tracking-[0.3em] text-primary">
+              {code.userCode}
+            </code>
+            <Button onClick={copyAndOpen}>
+              <Copy /> Copiar código e abrir GitHub
+            </Button>
+            <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Loader2 className="size-3 animate-spin" /> Aguardando autorização...
+            </p>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -150,19 +385,20 @@ function Stat({ label, value, unit, loading }: { label: string; value: number; u
 }
 
 /** Gravatar photo by email; initials when there is none (or offline) */
-function Avatar({ name, email }: { name?: string | null; email?: string | null }) {
+function Avatar({ name, email, url: direct }: { name?: string | null; email?: string | null; url?: string }) {
   const [url, setUrl] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
     setFailed(false);
+    if (direct) return setUrl(direct);
     if (!email) return setUrl(null);
     // Gravatar identifies the account by the SHA-256 of the email (the email itself is not sent)
     crypto.subtle.digest("SHA-256", new TextEncoder().encode(email.trim().toLowerCase())).then((buf) => {
       const hex = [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
       setUrl(`https://gravatar.com/avatar/${hex}?s=160&d=404`);
     });
-  }, [email]);
+  }, [email, direct]);
 
   const initials = (name ?? email ?? "?")
     .split(/[\s@.]+/)
@@ -218,7 +454,7 @@ const GAP = 3;
 const MONTHS = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
 
 // GitHub-style grid: one column per week (Sunday on top), 53 weeks back from today
-function Heatmap({ days, total, projects }: { days: Map<string, number>; total: number; projects: number }) {
+function Heatmap({ days, caption }: { days: Map<string, number>; caption: string }) {
   const [hover, setHover] = useState<{ x: number; y: number; text: string } | null>(null);
 
   const weeks = useMemo(() => {
@@ -243,9 +479,7 @@ function Heatmap({ days, total, projects }: { days: Map<string, number>; total: 
     <div className="relative">
       <div className="mb-2 flex items-baseline gap-2">
         <h3 className="text-sm font-medium">Contribuições</h3>
-        <span className="text-xs text-muted-foreground">
-          {total} commits seus no último ano, em {projects} projeto(s)
-        </span>
+        <span className="text-xs text-muted-foreground">{caption}</span>
       </div>
       <div className="overflow-x-auto pb-1">
         <div className="inline-flex gap-2">

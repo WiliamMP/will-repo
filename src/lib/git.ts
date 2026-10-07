@@ -46,6 +46,22 @@ export type RepoSummary = {
   myCommits: number[];
 };
 
+export type GithubProfile = {
+  login: string;
+  name: string | null;
+  avatarUrl: string;
+  bio: string | null;
+  url: string;
+  followers: number;
+  following: number;
+  repositories: number;
+  totalContributions: number;
+  /** [date "YYYY-MM-DD", count] for every day of the last year */
+  days: [string, number][];
+  source: "app" | "gh";
+};
+export type DeviceCode = { deviceCode: string; userCode: string; verificationUri: string; interval: number };
+
 export type DiffLine = {
   kind: "hunk" | "ctx" | "add" | "del" | "info" | "marker" | "ours" | "base" | "theirs";
   old: number | null;
@@ -56,6 +72,10 @@ export type DiffLine = {
 export const git = {
   openRepo: (path: string) => invoke<RepoInfo>("open_repo", { path }),
   userInfo: () => invoke<UserInfo>("user_info"),
+  githubProfile: () => invoke<GithubProfile>("github_profile"),
+  githubDeviceStart: () => invoke<DeviceCode>("github_device_start"),
+  githubDevicePoll: (deviceCode: string) => invoke<"pending" | "slow_down" | "done">("github_device_poll", { deviceCode }),
+  githubLogout: () => invoke<void>("github_logout"),
   repoSummary: (repo: string, email: string | null) => invoke<RepoSummary>("repo_summary", { repo, email }),
   log: (repo: string, limit: number) => invoke<Commit[]>("log", { repo, limit }),
   search: (repo: string, query: string) => invoke<Commit[]>("search", { repo, query }),
