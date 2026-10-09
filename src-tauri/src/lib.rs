@@ -22,7 +22,7 @@ pub fn run() {
             git::discard_list,
             git::restore_discard,
             git::commit,
-            git::head_message,
+            git::commit_message,
             git::pick,
             git::create_tag,
             git::delete_tag,
@@ -54,6 +54,7 @@ pub fn run() {
             github::github_logout,
             github::github_profile,
             github::github_prs,
+            github::github_url,
             github::github_create_pr,
         ])
         .run(tauri::generate_context!())

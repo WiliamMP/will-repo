@@ -284,10 +284,10 @@ pub fn commit(repo: String, message: String, amend: bool) -> Res<()> {
     git(&repo, &args).map(drop)
 }
 
-/// Full message of the last commit, to pre-fill the box when amending
+/// Full message (subject + body) of a commit; "HEAD" pre-fills the box when amending
 #[tauri::command(async)]
-pub fn head_message(repo: String) -> Res<String> {
-    Ok(git(&repo, &["log", "-1", "--format=%B"])?.trim_end().to_string())
+pub fn commit_message(repo: String, rev: String) -> Res<String> {
+    Ok(git(&repo, &["log", "-1", "--format=%B", &rev, "--"])?.trim_end().to_string())
 }
 
 #[tauri::command(async)]
@@ -1113,7 +1113,7 @@ mod tests {
 
         // amend: message only, then with a staged file
         commit(r(), "base editado".into(), true).unwrap();
-        assert_eq!(head_message(r()).unwrap(), "base editado");
+        assert_eq!(commit_message(r(), "HEAD".into()).unwrap(), "base editado");
         std::fs::write(dir.join("g.txt"), "g
 ").unwrap();
         stage(r(), vec!["g.txt".into()]).unwrap();
@@ -1133,7 +1133,7 @@ mod tests {
         assert!(dir.join("h.txt").exists());
         pick(r(), "HEAD".into(), true).unwrap();
         assert!(!dir.join("h.txt").exists());
-        assert!(head_message(r()).unwrap().starts_with("Revert \"add h\""));
+        assert!(commit_message(r(), "HEAD".into()).unwrap().starts_with("Revert \"add h\""));
 
         // conflicting cherry-pick stays in progress until aborted
         std::fs::write(dir.join("f.txt"), "main

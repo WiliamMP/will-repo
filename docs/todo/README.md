@@ -73,7 +73,6 @@ Recursos inspirados no Sourcetree, no GitKraken e no Fork, repensados para o est
 
 - [ ] **Grupos de projetos** [workspaces do GitKraken]: agrupar repos no dashboard (Trabalho, Pessoal...) e fazer fetch em todos de uma vez. (médio)
 - [ ] **Central de pendências** [Launchpad do GitKraken + notificações do Fork]: no dashboard, PRs aguardando sua revisão, seus PRs abertos com status do CI e notificações do GitHub, de todos os projetos. (grande)
-- [ ] **Links de issues**: detectar `#123` nas mensagens de commit e abrir a issue no GitHub. (pequeno)
 - [ ] **Compartilhar um diff** [Cloud Patches do GitKraken]: enviar alterações ainda não commitadas como Gist privado, para mostrar a alguém. (médio)
 
 ## Já feito
@@ -88,3 +87,4 @@ Recursos inspirados no Sourcetree, no GitKraken e no Fork, repensados para o est
 - [x] Pull Requests: lista dos abertos com CI e revisão, criar PR da branch atual (com push automático)
 - [x] Descartar sem medo: backup antes de cada descarte, "Desfazer" no aviso e lista de descartes recentes
 - [x] Assistente de mensagem: chips de Conventional Commits, mensagens recentes e contador do título
+- [x] Links de issues: #123 no título e no corpo do commit abre no GitHub; detalhes mostram o corpo da mensagem

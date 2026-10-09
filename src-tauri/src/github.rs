@@ -220,6 +220,12 @@ fn origin(repo: &str) -> Res<(String, String)> {
     parse_remote(&url).ok_or_else(|| format!("O origin não é do GitHub: {}", url.trim()))
 }
 
+/// "https://github.com/owner/name" when origin is on GitHub (for #123 links), None otherwise
+#[tauri::command(async)]
+pub fn github_url(repo: String) -> Option<String> {
+    origin(&repo).ok().map(|(owner, name)| format!("https://github.com/{owner}/{name}"))
+}
+
 #[derive(Debug, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct PullRequest {

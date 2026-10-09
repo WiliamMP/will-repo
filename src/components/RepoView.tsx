@@ -47,6 +47,10 @@ export function RepoView({ path }: { path: string }) {
   const [stashName, setStashName] = useState<string | null>(null);
   const [tab, setTab] = useState("details");
   const [tagTarget, setTagTarget] = useState<Commit | null>(null);
+  const [github, setGithub] = useState<string | null>(null);
+  useEffect(() => {
+    git.githubUrl(path).then(setGithub, () => setGithub(null));
+  }, [path]);
 
   const commits = data?.commits ?? [];
   // Default selection: newest commit. After a reload, refresh the object by hash.
@@ -266,7 +270,7 @@ export function RepoView({ path }: { path: string }) {
                   }
                 />
               ) : commit ? (
-                <CommitDetails repo={repo.path} commit={commit} />
+                <CommitDetails repo={repo.path} commit={commit} github={github} />
               ) : (
                 <p className="p-4 text-muted-foreground">Nenhum commit ainda.</p>
               )}
