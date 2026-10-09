@@ -77,7 +77,8 @@ pub async fn github_device_start() -> Res<DeviceCode> {
     client()?
         .post("https://github.com/login/device/code")
         .header("Accept", "application/json")
-        .form(&[("client_id", CLIENT_ID), ("scope", "read:user")])
+        // repo: list and create pull requests, private repos included
+        .form(&[("client_id", CLIENT_ID), ("scope", "read:user repo")])
         .send()
         .await
         .map_err(net)?
@@ -152,21 +153,24 @@ const QUERY: &str = "query { viewer { login name avatarUrl bio url
   contributionsCollection { contributionCalendar { totalContributions
     weeks { contributionDays { date contributionCount } } } } } }";
 
-#[tauri::command]
-pub async fn github_profile() -> Res<GithubProfile> {
+/// Sends a request with the saved token; returns the JSON body and the token source
+async fn send(req: reqwest::RequestBuilder) -> Res<(Value, &'static str)> {
     let (token, source) = token().ok_or(NOT_LOGGED)?;
-    let resp = client()?
-        .post("https://api.github.com/graphql")
-        .bearer_auth(token)
-        .json(&json!({ "query": QUERY }))
-        .send()
-        .await
-        .map_err(net)?;
+    let resp = req.bearer_auth(token).send().await.map_err(net)?;
     if resp.status() == reqwest::StatusCode::UNAUTHORIZED {
         // revoked or expired token: behave as logged out
         return Err(NOT_LOGGED.into());
     }
-    let body: Value = resp.json().await.map_err(|e| e.to_string())?;
+    Ok((resp.json().await.map_err(|e| e.to_string())?, source))
+}
+
+async fn graphql(query: &str, variables: Value) -> Res<(Value, &'static str)> {
+    send(client()?.post("https://api.github.com/graphql").json(&json!({ "query": query, "variables": variables }))).await
+}
+
+#[tauri::command]
+pub async fn github_profile() -> Res<GithubProfile> {
+    let (body, source) = graphql(QUERY, json!({})).await?;
     parse_profile(&body, source)
 }
 
@@ -201,9 +205,162 @@ fn parse_profile(body: &Value, source: &str) -> Res<GithubProfile> {
     })
 }
 
+// ---------- Pull requests ----------
+
+/// (owner, name) from a GitHub remote URL: https://github.com/o/r.git, git@github.com:o/r.git, ssh://...
+fn parse_remote(url: &str) -> Option<(String, String)> {
+    let url = url.trim().trim_end_matches('/').trim_end_matches(".git");
+    let rest = url.split_once("github.com")?.1.trim_start_matches([':', '/']);
+    let (owner, name) = rest.split_once('/')?;
+    (!owner.is_empty() && !name.is_empty() && !name.contains('/')).then(|| (owner.into(), name.into()))
+}
+
+fn origin(repo: &str) -> Res<(String, String)> {
+    let url = crate::git::git(repo, &["remote", "get-url", "origin"]).map_err(|_| "Repositório sem remote origin".to_string())?;
+    parse_remote(&url).ok_or_else(|| format!("O origin não é do GitHub: {}", url.trim()))
+}
+
+#[derive(Debug, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct PullRequest {
+    number: u64,
+    title: String,
+    url: String,
+    author: String,
+    head: String,
+    base: String,
+    draft: bool,
+    updated_at: String,
+    /// APPROVED | CHANGES_REQUESTED | REVIEW_REQUIRED
+    review: Option<String>,
+    /// CI of the last commit: SUCCESS | FAILURE | ERROR | PENDING | EXPECTED, None without checks
+    ci: Option<String>,
+}
+
+#[derive(Debug, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct PullRequests {
+    default_branch: String,
+    items: Vec<PullRequest>,
+}
+
+const PRS_QUERY: &str = "query($owner: String!, $name: String!) { repository(owner: $owner, name: $name) {
+  defaultBranchRef { name }
+  pullRequests(states: OPEN, first: 50, orderBy: { field: UPDATED_AT, direction: DESC }) { nodes {
+    number title url isDraft updatedAt reviewDecision headRefName baseRefName author { login }
+    commits(last: 1) { nodes { commit { statusCheckRollup { state } } } } } } } }";
+
+/// Open pull requests of the repo behind `origin`
+#[tauri::command]
+pub async fn github_prs(repo: String) -> Res<PullRequests> {
+    let (owner, name) = origin(&repo)?;
+    let (body, _) = graphql(PRS_QUERY, json!({ "owner": owner, "name": name })).await?;
+    parse_prs(&body)
+}
+
+fn parse_prs(body: &Value) -> Res<PullRequests> {
+    if let Some(msg) = body["errors"][0]["message"].as_str() {
+        return Err(format!("GitHub: {msg}"));
+    }
+    let r = &body["data"]["repository"];
+    let s = |v: &Value| v.as_str().unwrap_or_default().to_string();
+    let items = r["pullRequests"]["nodes"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .map(|p| PullRequest {
+            number: p["number"].as_u64().unwrap_or(0),
+            title: s(&p["title"]),
+            url: s(&p["url"]),
+            // deleted accounts come back as null ("ghost" on the site)
+            author: p["author"]["login"].as_str().unwrap_or("ghost").into(),
+            head: s(&p["headRefName"]),
+            base: s(&p["baseRefName"]),
+            draft: p["isDraft"].as_bool().unwrap_or(false),
+            updated_at: s(&p["updatedAt"]),
+            review: p["reviewDecision"].as_str().map(String::from),
+            ci: p["commits"]["nodes"][0]["commit"]["statusCheckRollup"]["state"].as_str().map(String::from),
+        })
+        .collect();
+    Ok(PullRequests { default_branch: s(&r["defaultBranchRef"]["name"]), items })
+}
+
+/// Opens a PR from the current branch (already pushed) into `base`; returns its URL
+#[tauri::command]
+pub async fn github_create_pr(repo: String, title: String, body: String, base: String, draft: bool) -> Res<String> {
+    let (owner, name) = origin(&repo)?;
+    let head = crate::git::git(&repo, &["rev-parse", "--abbrev-ref", "HEAD"])?.trim().to_string();
+    if head == "HEAD" {
+        return Err("HEAD destacado: faça checkout de uma branch".into());
+    }
+    let req = client()?
+        .post(format!("https://api.github.com/repos/{owner}/{name}/pulls"))
+        .header("Accept", "application/vnd.github+json")
+        .json(&json!({ "title": title, "body": body, "head": head, "base": base, "draft": draft }));
+    let (resp, _) = send(req).await?;
+    created_url(&resp)
+}
+
+/// REST answer -> PR URL, or GitHub's reason ("A pull request already exists for ...")
+fn created_url(resp: &Value) -> Res<String> {
+    if let Some(url) = resp["html_url"].as_str() {
+        return Ok(url.into());
+    }
+    let detail = resp["errors"][0]["message"].as_str().or(resp["message"].as_str()).unwrap_or("resposta inesperada");
+    Err(format!("GitHub: {detail}"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn remote_urls() {
+        let o = |s: &str| parse_remote(s).map(|(a, b)| format!("{a}/{b}"));
+        assert_eq!(o("https://github.com/WiliamMP/will-repo.git").as_deref(), Some("WiliamMP/will-repo"));
+        assert_eq!(o("git@github.com:WiliamMP/will-repo.git\n").as_deref(), Some("WiliamMP/will-repo"));
+        assert_eq!(o("ssh://git@github.com/a/b").as_deref(), Some("a/b"));
+        assert_eq!(o("https://user@github.com/a/b/").as_deref(), Some("a/b"));
+        assert_eq!(o("https://gitlab.com/a/b.git"), None);
+        assert_eq!(o("https://github.com/a"), None);
+    }
+
+    #[test]
+    fn prs_from_graphql() {
+        let body = json!({ "data": { "repository": {
+            "defaultBranchRef": { "name": "master" },
+            "pullRequests": { "nodes": [
+                { "number": 7, "title": "feat: x", "url": "https://github.com/a/b/pull/7", "isDraft": true,
+                  "updatedAt": "2026-10-09T10:00:00Z", "reviewDecision": "APPROVED", "headRefName": "feature/x",
+                  "baseRefName": "master", "author": { "login": "will" },
+                  "commits": { "nodes": [ { "commit": { "statusCheckRollup": { "state": "FAILURE" } } } ] } },
+                { "number": 8, "title": "fix", "url": "u", "isDraft": false, "updatedAt": "", "reviewDecision": null,
+                  "headRefName": "fix", "baseRefName": "master", "author": null,
+                  "commits": { "nodes": [ { "commit": { "statusCheckRollup": null } } ] } }
+            ] } } } });
+        let p = parse_prs(&body).unwrap();
+        assert_eq!(p.default_branch, "master");
+        assert_eq!((p.items[0].draft, p.items[0].ci.as_deref(), p.items[0].review.as_deref()), (true, Some("FAILURE"), Some("APPROVED")));
+        assert_eq!((p.items[1].author.as_str(), p.items[1].ci.as_deref()), ("ghost", None));
+        assert!(parse_prs(&json!({ "errors": [ { "message": "Could not resolve" } ] })).is_err());
+    }
+
+    #[test]
+    fn create_pr_answer() {
+        assert_eq!(created_url(&json!({ "html_url": "https://github.com/a/b/pull/9" })).unwrap(), "https://github.com/a/b/pull/9");
+        let dup = json!({ "message": "Validation Failed", "errors": [ { "message": "A pull request already exists for a:x." } ] });
+        assert_eq!(created_url(&dup).unwrap_err(), "GitHub: A pull request already exists for a:x.");
+        assert_eq!(created_url(&json!({ "message": "Not Found" })).unwrap_err(), "GitHub: Not Found");
+    }
+
+    /// Real call: open PRs of this repo. Run with: cargo test -- --ignored
+    #[test]
+    #[ignore]
+    fn live_prs() {
+        let p = tauri::async_runtime::block_on(github_prs("..".into())).unwrap();
+        println!("default {}, {} PR(s) abertos", p.default_branch, p.items.len());
+        assert!(!p.default_branch.is_empty());
+    }
 
     #[test]
     fn profile_from_graphql() {

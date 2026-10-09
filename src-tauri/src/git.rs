@@ -53,7 +53,7 @@ fn run_with_input(repo: &str, args: &[&str], input: Option<&str>) -> Res<Output>
 }
 
 /// Runs git and returns stdout, or stderr as the error message
-fn git(repo: &str, args: &[&str]) -> Res<String> {
+pub(crate) fn git(repo: &str, args: &[&str]) -> Res<String> {
     git_with_input(repo, args, None)
 }
 

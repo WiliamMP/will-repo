@@ -51,6 +51,8 @@ pub fn run() {
             github::github_device_poll,
             github::github_logout,
             github::github_profile,
+            github::github_prs,
+            github::github_create_pr,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

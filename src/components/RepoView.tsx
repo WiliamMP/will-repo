@@ -28,6 +28,7 @@ import { AnimatedShinyText } from "@/components/ui/animated-shiny-text";
 import { BranchDialog } from "@/components/BranchDialog";
 import { CommitDetails, StashDetails } from "@/components/CommitDetails";
 import { History, type CommitActions } from "@/components/History";
+import { PullRequests } from "@/components/PullRequests";
 import { Sidebar, type BranchActions } from "@/components/Sidebar";
 import { StashDialog } from "@/components/StashDialog";
 import { TagDialog } from "@/components/TagDialog";
@@ -242,6 +243,7 @@ export function RepoView({ path }: { path: string }) {
                     </Badge>
                   )}
                 </TabsTrigger>
+                <TabsTrigger value="prs">Pull Requests</TabsTrigger>
               </TabsList>
             </div>
             <TabsContent value="details" className="flex min-h-0 flex-col">
@@ -277,6 +279,9 @@ export function RepoView({ path }: { path: string }) {
                 headPushed={!!data.tracking.upstream && data.tracking.ahead === 0}
                 run={run}
               />
+            </TabsContent>
+            <TabsContent value="prs" className="flex min-h-0 flex-col">
+              <PullRequests repo={repo.path} head={data.refs.head} tracking={data.tracking} run={run} />
             </TabsContent>
           </Tabs>
         </ResizablePanel>

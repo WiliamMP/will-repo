@@ -11,7 +11,6 @@ Lista de próximas funcionalidades do will-repo. Tamanho estimado entre parênte
 
 ## Integração com GitHub
 
-- [ ] ⭐ **Pull Requests**: listar PRs do repositório, ver status do CI e criar PR a partir da branch atual. (médio)
 - [ ] **Clonar repositório** a partir da lista dos seus repos no GitHub. (pequeno)
 - [ ] **Ativar o Device Flow**: criar o OAuth App em github.com/settings/developers (com "Enable Device Flow") e colar o Client ID em `CLIENT_ID` no arquivo `src-tauri/src/github.rs`. (trivial)
 
@@ -88,3 +87,4 @@ Recursos inspirados no Sourcetree, no GitKraken e no Fork, repensados para o est
 - [x] Dashboard com perfil, contribuições e cards de projetos
 - [x] Login no GitHub (gh CLI / Device Flow) com volta para os dados locais quando offline
 - [x] Amend, cherry-pick e revert pelo menu do commit, tags (criar, excluir, enviar)
+- [x] Pull Requests: lista dos abertos com CI e revisão, criar PR da branch atual (com push automático)

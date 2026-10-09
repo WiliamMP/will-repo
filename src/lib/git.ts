@@ -60,6 +60,20 @@ export type GithubProfile = {
   days: [string, number][];
   source: "app" | "gh";
 };
+export type PullRequest = {
+  number: number;
+  title: string;
+  url: string;
+  author: string;
+  head: string;
+  base: string;
+  draft: boolean;
+  updatedAt: string;
+  review: "APPROVED" | "CHANGES_REQUESTED" | "REVIEW_REQUIRED" | null;
+  /** CI of the last commit; null when the repo has no checks */
+  ci: "SUCCESS" | "FAILURE" | "ERROR" | "PENDING" | "EXPECTED" | null;
+};
+export type PullRequests = { defaultBranch: string; items: PullRequest[] };
 export type DeviceCode = { deviceCode: string; userCode: string; verificationUri: string; interval: number };
 
 export type DiffLine = {
@@ -76,6 +90,10 @@ export const git = {
   githubDeviceStart: () => invoke<DeviceCode>("github_device_start"),
   githubDevicePoll: (deviceCode: string) => invoke<"pending" | "slow_down" | "done">("github_device_poll", { deviceCode }),
   githubLogout: () => invoke<void>("github_logout"),
+  githubPrs: (repo: string) => invoke<PullRequests>("github_prs", { repo }),
+  /** returns the new PR's URL */
+  githubCreatePr: (repo: string, title: string, body: string, base: string, draft: boolean) =>
+    invoke<string>("github_create_pr", { repo, title, body, base, draft }),
   repoSummary: (repo: string, email: string | null) => invoke<RepoSummary>("repo_summary", { repo, email }),
   log: (repo: string, limit: number) => invoke<Commit[]>("log", { repo, limit }),
   search: (repo: string, query: string) => invoke<Commit[]>("search", { repo, query }),
