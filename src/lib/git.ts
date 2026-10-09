@@ -22,7 +22,8 @@ export type Status = { staged: FileChange[]; unstaged: FileChange[]; conflicted:
 export type Tracking = { upstream: string | null; ahead: number; behind: number };
 export type RepoInfo = { path: string; name: string };
 export type Stash = { name: string; message: string; timestamp: number };
-export type StashAction = "apply" | "pop" | "drop";
+export type Discard = { hash: string; timestamp: number; files: string[] };
+export type StashAction ="apply" | "pop" | "drop";
 export type HunkAction = "stage" | "unstage" | "discard";
 export type Choice = "ours" | "theirs" | "both";
 export type OpAction = "continue" | "abort" | "skip";
@@ -108,6 +109,9 @@ export const git = {
   stage: (repo: string, files: string[]) => invoke<void>("stage", { repo, files }),
   unstage: (repo: string, files: string[]) => invoke<void>("unstage", { repo, files }),
   discard: (repo: string, files: FileChange[]) => invoke<void>("discard", { repo, files }),
+  /** backups saved before each discard, newest first */
+  discardList: (repo: string) => invoke<Discard[]>("discard_list", { repo }),
+  restoreDiscard: (repo: string, hash: string) => invoke<void>("restore_discard", { repo, hash }),
   commit: (repo: string, message: string, amend: boolean) => invoke<void>("commit", { repo, message, amend }),
   headMessage: (repo: string) => invoke<string>("head_message", { repo }),
   /** cherry-pick onto HEAD, or revert (new commit that undoes it) */

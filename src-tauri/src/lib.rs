@@ -19,6 +19,8 @@ pub fn run() {
             git::stage,
             git::unstage,
             git::discard,
+            git::discard_list,
+            git::restore_discard,
             git::commit,
             git::head_message,
             git::pick,

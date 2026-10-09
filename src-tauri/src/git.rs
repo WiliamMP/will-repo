@@ -16,8 +16,8 @@ fn run(repo: &str, args: &[&str]) -> Res<Output> {
     run_with_input(repo, args, None)
 }
 
-/// Same as `run`, optionally writing `input` to git's stdin (used by `git apply -`)
-fn run_with_input(repo: &str, args: &[&str], input: Option<&str>) -> Res<Output> {
+/// git command with the app's defaults, not started yet
+fn command(repo: &str, args: &[&str]) -> Command {
     let mut cmd = Command::new("git");
     cmd.arg("-C")
         .arg(repo)
@@ -33,6 +33,12 @@ fn run_with_input(repo: &str, args: &[&str], input: Option<&str>) -> Res<Output>
         const CREATE_NO_WINDOW: u32 = 0x0800_0000; // no console flashing on every git call
         cmd.creation_flags(CREATE_NO_WINDOW);
     }
+    cmd
+}
+
+/// Same as `run`, optionally writing `input` to git's stdin (used by `git apply -`)
+fn run_with_input(repo: &str, args: &[&str], input: Option<&str>) -> Res<Output> {
+    let mut cmd = command(repo, args);
     let fail = |e: std::io::Error| format!("Não foi possível executar o git: {e}");
     let Some(input) = input else {
         return cmd.output().map_err(fail);
@@ -58,7 +64,11 @@ pub(crate) fn git(repo: &str, args: &[&str]) -> Res<String> {
 }
 
 fn git_with_input(repo: &str, args: &[&str], input: Option<&str>) -> Res<String> {
-    let out = run_with_input(repo, args, input)?;
+    check(run_with_input(repo, args, input)?, args)
+}
+
+/// stdout on success, stderr (or stdout) as the error otherwise
+fn check(out: Output, args: &[&str]) -> Res<String> {
     if out.status.success() {
         Ok(String::from_utf8_lossy(&out.stdout).into_owned())
     } else {
@@ -242,8 +252,10 @@ pub fn unstage(repo: String, files: Vec<String>) -> Res<()> {
 }
 
 /// Throws away working tree changes. Untracked files are deleted.
+/// A backup is saved first, so `restore_discard` can bring them back.
 #[tauri::command(async)]
 pub fn discard(repo: String, files: Vec<FileChange>) -> Res<()> {
+    backup(&repo, &files.iter().map(|f| f.path.as_str()).collect::<Vec<_>>())?;
     let (untracked, tracked): (Vec<_>, Vec<_>) = files.iter().partition(|f| f.status == '?');
     if !tracked.is_empty() {
         let args: Vec<&str> = ["restore", "--"]
@@ -702,6 +714,94 @@ pub fn stash_diff(repo: String, name: String, file: String) -> Res<Vec<DiffLine>
     Ok(parse::parse_diff(&parse::file_section(&full, &file)))
 }
 
+// ---------- Discard backups ----------
+
+/// Hidden ref whose reflog lists every backup (not shown as a branch or stash).
+/// Entries expire with git's reflog rules (30 days for these by default).
+const DISCARDS: &str = "refs/will-repo/discards";
+
+/// Saves the working tree version of `paths` as a commit on top of HEAD, using a
+/// temporary index so the real index (staged changes) is untouched.
+/// Commit message: "Descarte: a.txt, b.txt" + one path per line in the body.
+fn backup(repo: &str, paths: &[&str]) -> Res<()> {
+    let index = git(repo, &["rev-parse", "--git-path", "will-repo-backup-index"])?;
+    let index = Path::new(repo).join(index.trim());
+    let with_index = |args: &[&str]| check(command(repo, args).env("GIT_INDEX_FILE", &index).output().map_err(|e| e.to_string())?, args);
+    let head = git(repo, &["rev-parse", "--verify", "--quiet", "HEAD"]).ok();
+    let result = (|| {
+        match &head {
+            Some(_) => with_index(&["read-tree", "HEAD"])?,
+            None => with_index(&["read-tree", "--empty"])?,
+        };
+        // -A: a deleted file is recorded as absent
+        with_index(&[&["add", "-A", "-f", "--"][..], paths].concat())?;
+        let tree = with_index(&["write-tree"])?;
+        let message = format!("Descarte: {}
+
+{}", paths.join(", "), paths.join("
+"));
+        let mut args = vec!["commit-tree", tree.trim(), "-m", &message];
+        if let Some(h) = &head {
+            args.extend(["-p", h.trim()]);
+        }
+        let hash = git(repo, &args)?;
+        git(repo, &["update-ref", "--create-reflog", "-m", &message, DISCARDS, hash.trim()])
+    })();
+    let _ = std::fs::remove_file(&index);
+    result.map(drop)
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Discard {
+    hash: String,
+    timestamp: i64,
+    files: Vec<String>,
+}
+
+/// Backups, newest first
+#[tauri::command(async)]
+pub fn discard_list(repo: String) -> Res<Vec<Discard>> {
+    // no backup yet: the ref doesn't exist
+    let Ok(out) = git(&repo, &["log", "-g", "--format=%H%x1f%ct%x1f%b%x1e", DISCARDS, "--"]) else {
+        return Ok(vec![]);
+    };
+    Ok(out
+        .split('')
+        .filter_map(|rec| {
+            let mut f = rec.trim().split(FS);
+            Some(Discard {
+                hash: f.next().filter(|h| !h.is_empty())?.into(),
+                timestamp: f.next()?.parse().unwrap_or(0),
+                files: f.next()?.lines().filter(|l| !l.is_empty()).map(String::from).collect(),
+            })
+        })
+        .collect())
+}
+
+/// Puts the backed-up files back in the working tree (a file absent from the backup is deleted)
+#[tauri::command(async)]
+pub fn restore_discard(repo: String, hash: String) -> Res<()> {
+    let files = discard_list(repo.clone())?
+        .into_iter()
+        .find(|d| d.hash == hash)
+        .ok_or("Backup não encontrado")?
+        .files;
+    // current edits of those files would be overwritten: back them up too
+    let paths: Vec<&str> = files.iter().map(String::as_str).collect();
+    if !git(&repo, &[&["status", "--porcelain", "--"][..], &paths].concat())?.is_empty() {
+        backup(&repo, &paths)?;
+    }
+    for file in &files {
+        if git(&repo, &["cat-file", "-e", &format!("{hash}:{file}")]).is_ok() {
+            git(&repo, &["restore", "--source", &hash, "--worktree", "--", file])?;
+        } else {
+            let _ = std::fs::remove_file(Path::new(&repo).join(file));
+        }
+    }
+    Ok(())
+}
+
 // ---------- Hunk staging ----------
 
 #[derive(Deserialize)]
@@ -740,6 +840,9 @@ pub fn apply_hunk(
         Some(l) => parse::lines_patch(&diff, hunk, l, !matches!(action, HunkAction::Stage)),
     }
     .ok_or("O trecho mudou, atualize a tela (F5)")?;
+    if matches!(action, HunkAction::Discard) {
+        backup(&repo, &[&file])?;
+    }
     git_with_input(&repo, &[apply_args, &["-"]].concat(), Some(&patch)).map(drop)
 }
 
@@ -1060,6 +1163,71 @@ mod tests {
         delete_tag(r(), "v1".into()).unwrap();
         assert_eq!(refs(r()).unwrap().tags, vec!["v2"]);
         assert!(push_tag(r(), "v2".into()).is_err()); // no origin
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn discard_backup_and_restore() {
+        let (dir, repo) = temp_repo("discard");
+        let r = || repo.clone();
+        let read = |f: &str| std::fs::read_to_string(dir.join(f)).unwrap();
+        assert!(discard_list(r()).unwrap().is_empty());
+
+        // modified + staged elsewhere, untracked, deleted: all discarded, then restored
+        std::fs::write(dir.join("g.txt"), "g\n").unwrap();
+        git(&repo, &["add", "g.txt"]).unwrap();
+        git(&repo, &["commit", "-q", "-m", "g"]).unwrap();
+        std::fs::write(dir.join("f.txt"), "edited\n").unwrap();
+        std::fs::write(dir.join("new.txt"), "novo\n").unwrap();
+        std::fs::remove_file(dir.join("g.txt")).unwrap();
+        std::fs::write(dir.join("staged.txt"), "s\n").unwrap();
+        git(&repo, &["add", "staged.txt"]).unwrap();
+
+        let st = status(r()).unwrap();
+        let unstaged: Vec<_> = st.unstaged.into_iter().collect();
+        assert_eq!(unstaged.len(), 3);
+        discard(r(), unstaged).unwrap();
+        assert_eq!(read("f.txt"), "base\n");
+        assert!(!dir.join("new.txt").exists());
+        assert!(dir.join("g.txt").exists());
+        // the real index was not touched
+        assert_eq!(status(r()).unwrap().staged[0].path, "staged.txt");
+
+        let list = discard_list(r()).unwrap();
+        assert_eq!(list.len(), 1);
+        assert_eq!(list[0].files, vec!["f.txt", "g.txt", "new.txt"]);
+        restore_discard(r(), list[0].hash.clone()).unwrap();
+        assert_eq!(read("f.txt"), "edited\n");
+        assert_eq!(read("new.txt"), "novo\n");
+        assert!(!dir.join("g.txt").exists());
+
+        // hunk discard is backed up too, newest first
+        apply_hunk(r(), "f.txt".into(), 0, None, HunkAction::Discard).unwrap();
+        assert_eq!(read("f.txt"), "base\n");
+        let list = discard_list(r()).unwrap();
+        assert_eq!((list.len(), list[0].files.as_slice()), (2, &["f.txt".to_string()][..]));
+        restore_discard(r(), list[0].hash.clone()).unwrap();
+        assert_eq!(read("f.txt"), "edited\n");
+        // restoring over local edits backs them up first
+        std::fs::write(dir.join("f.txt"), "local\n").unwrap();
+        restore_discard(r(), list[1].hash.clone()).unwrap();
+        assert_eq!(discard_list(r()).unwrap().len(), 3);
+        assert!(restore_discard(r(), "0000000".into()).is_err());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn discard_backup_without_commits() {
+        let dir = std::env::temp_dir().join(format!("will-repo-empty-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let repo = dir.to_string_lossy().into_owned();
+        git(&repo, &["init", "-q"]).unwrap();
+        std::fs::write(dir.join("a.txt"), "a\n").unwrap();
+        discard(repo.clone(), status(repo.clone()).unwrap().unstaged).unwrap();
+        assert!(!dir.join("a.txt").exists());
+        restore_discard(repo.clone(), discard_list(repo.clone()).unwrap()[0].hash.clone()).unwrap();
+        assert!(dir.join("a.txt").exists());
         let _ = std::fs::remove_dir_all(&dir);
     }
 

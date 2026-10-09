@@ -12,6 +12,7 @@ import { BorderBeam } from "@/components/ui/border-beam";
 import { ShimmerButton } from "@/components/ui/shimmer-button";
 import { ConflictView, sideNames } from "@/components/ConflictView";
 import { DiffView } from "@/components/DiffView";
+import { DiscardsDialog } from "@/components/DiscardsDialog";
 import { FileList } from "@/components/FileList";
 import { git, type DiffLine, type FileChange, type HunkAction, type RepoState, type Status } from "@/lib/git";
 import { cn } from "@/lib/utils";
@@ -50,31 +51,27 @@ export function WorkingTree({ repo, status, state, headPushed, run }: Props) {
   const stage = (files: FileChange[]) => run("stage", (p) => git.stage(p, files.map((f) => f.path)));
   const unstage = (files: FileChange[]) => run("unstage", (p) => git.unstage(p, files.map((f) => f.path)));
 
-  const discard = async (files: FileChange[]) => {
-    const names = files.map((f) => f.path).join("\n");
-    const ok = await ask(`Descartar alterações? Isso não pode ser desfeito.\n\n${names}`, {
-      title: "Descartar",
-      kind: "warning",
-      okLabel: "Descartar",
-      cancelLabel: "Cancelar",
+  // Discards are backed up in Rust, so no confirmation: a toast offers "Desfazer" instead
+  const restore = (hash: string) => run("restore", (p) => git.restoreDiscard(p, hash), "Alterações restauradas");
+  const offerUndo = (what: string) =>
+    toast.success(`${what} descartado(s)`, {
+      duration: 10000,
+      action: {
+        label: "Desfazer",
+        onClick: () => git.discardList(repo).then(([last]) => last && restore(last.hash), (e) => toast.error(String(e))),
+      },
     });
-    if (ok) run("discard", (p) => git.discard(p, files));
+
+  const discard = async (files: FileChange[]) => {
+    const what = files.length === 1 ? files[0].path : `${files.length} arquivos`;
+    if (await run("discard", (p) => git.discard(p, files))) offerUndo(what);
   };
 
   // Hunk = one "@@" block of the diff. With lines selected, only those lines are used.
   const hunk = async (index: number, action: HunkAction, lines: number[]) => {
     if (!pick) return;
-    const what = lines.length ? `${lines.length} linha(s)` : "este trecho";
-    if (action === "discard") {
-      const ok = await ask(`Descartar ${what}? Isso não pode ser desfeito.`, {
-        title: "Descartar",
-        kind: "warning",
-        okLabel: "Descartar",
-        cancelLabel: "Cancelar",
-      });
-      if (!ok) return;
-    }
-    run("trecho", (p) => git.applyHunk(p, pick.file.path, index, action, lines.length ? lines : undefined));
+    const ok = await run("trecho", (p) => git.applyHunk(p, pick.file.path, index, action, lines.length ? lines : undefined));
+    if (ok && action === "discard") offerUndo(lines.length ? `${lines.length} linha(s)` : "Trecho");
   };
 
   const hunkActions = (index: number, lines: number[]) => {
@@ -185,6 +182,7 @@ export function WorkingTree({ repo, status, state, headPushed, run }: Props) {
           </div>
         )}
         <ListHeader title={`Não preparados (${status.unstaged.length})`}>
+          <DiscardsDialog repo={repo} onRestore={restore} />
           {status.unstaged.length > 0 && (
             <>
               <Button variant="ghost" size="xs" onClick={() => discard(status.unstaged)}>

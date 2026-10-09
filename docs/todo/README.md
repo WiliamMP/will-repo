@@ -40,7 +40,6 @@ Recursos inspirados no Sourcetree, no GitKraken e no Fork, repensados para o est
 
 - [ ] **Máquina do tempo** [reflog do Fork]: linha do tempo de todos os movimentos do HEAD (commits, checkouts, resets, rebases) com restauração em um clique. Recupera commits "perdidos". (médio)
 - [ ] **Ctrl+Z para ações do git** [undo/redo do GitKraken]: desfazer o último commit, checkout, merge ou branch excluída. (médio)
-- [ ] **Descartar sem medo**: antes de descartar alterações, guardar uma cópia num stash oculto, o que permite desfazer até "Descartar tudo". Hoje esse descarte é irreversível. (pequeno)
 
 ### Grafo e histórico
 
@@ -88,3 +87,4 @@ Recursos inspirados no Sourcetree, no GitKraken e no Fork, repensados para o est
 - [x] Login no GitHub (gh CLI / Device Flow) com volta para os dados locais quando offline
 - [x] Amend, cherry-pick e revert pelo menu do commit, tags (criar, excluir, enviar)
 - [x] Pull Requests: lista dos abertos com CI e revisão, criar PR da branch atual (com push automático)
+- [x] Descartar sem medo: backup antes de cada descarte, "Desfazer" no aviso e lista de descartes recentes
