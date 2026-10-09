@@ -27,9 +27,10 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { AnimatedShinyText } from "@/components/ui/animated-shiny-text";
 import { BranchDialog } from "@/components/BranchDialog";
 import { CommitDetails, StashDetails } from "@/components/CommitDetails";
-import { History } from "@/components/History";
+import { History, type CommitActions } from "@/components/History";
 import { Sidebar, type BranchActions } from "@/components/Sidebar";
 import { StashDialog } from "@/components/StashDialog";
+import { TagDialog } from "@/components/TagDialog";
 import { WorkingTree } from "@/components/WorkingTree";
 import { useRepo, type RepoApi } from "@/hooks/use-repo";
 import { git, type Commit, type OpAction } from "@/lib/git";
@@ -44,6 +45,7 @@ export function RepoView({ path }: { path: string }) {
   const [selected, setSelected] = useState<Commit | null>(null);
   const [stashName, setStashName] = useState<string | null>(null);
   const [tab, setTab] = useState("details");
+  const [tagTarget, setTagTarget] = useState<Commit | null>(null);
 
   const commits = data?.commits ?? [];
   // Default selection: newest commit. After a reload, refresh the object by hash.
@@ -114,6 +116,18 @@ export function RepoView({ path }: { path: string }) {
       }
       reload();
     },
+    pushTag: (name) => run("push", (p) => git.pushTag(p, name), `Tag ${name} enviada`),
+    deleteTag: async (name) => {
+      if (await confirm(`Excluir a tag ${name}? Se já foi enviada, ela continua no remote.`, "Excluir tag", "Excluir"))
+        run("tag", (p) => git.deleteTag(p, name), `Tag ${name} excluída`);
+    },
+  };
+
+  // Conflicts leave the operation in progress: the banner and the changes tab take over
+  const commitActions: CommitActions = {
+    cherryPick: (c) => run("cherry-pick", (p) => git.pick(p, c.hash, false), `${c.hash.slice(0, 7)} aplicado em ${head}`),
+    revert: (c) => run("revert", (p) => git.pick(p, c.hash, true), `${c.hash.slice(0, 7)} revertido`),
+    tag: setTagTarget,
   };
 
   const stashAction = async (action: "apply" | "pop" | "drop") => {
@@ -170,6 +184,14 @@ export function RepoView({ path }: { path: string }) {
         </div>
       </header>
 
+      <TagDialog
+        commit={tagTarget}
+        onClose={() => setTagTarget(null)}
+        onCreate={(name, message) =>
+          run("tag", (p) => git.createTag(p, name, tagTarget!.hash, message), `Tag ${name} criada`)
+        }
+      />
+
       <OperationBanner api={api} onShowConflicts={() => setTab("changes")} />
 
       <ResizablePanelGroup orientation="horizontal" className="min-h-0 flex-1">
@@ -194,6 +216,7 @@ export function RepoView({ path }: { path: string }) {
             selected={stash ? null : (commit?.hash ?? null)}
             hasMore={data.hasMore}
             onLoadMore={loadMore}
+            actions={commitActions}
             onSelect={(c) => {
               setSelected(c);
               setStashName(null);
@@ -247,7 +270,13 @@ export function RepoView({ path }: { path: string }) {
               )}
             </TabsContent>
             <TabsContent value="changes" className="flex min-h-0 flex-col">
-              <WorkingTree repo={repo.path} status={data.status} state={data.state} run={run} />
+              <WorkingTree
+                repo={repo.path}
+                status={data.status}
+                state={data.state}
+                headPushed={!!data.tracking.upstream && data.tracking.ahead === 0}
+                run={run}
+              />
             </TabsContent>
           </Tabs>
         </ResizablePanel>

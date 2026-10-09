@@ -5,9 +5,6 @@ Lista de próximas funcionalidades do will-repo. Tamanho estimado entre parênte
 
 ## Dia a dia no git
 
-- [ ] ⭐ **Amend**: editar o último commit (mensagem e/ou arquivos). (pequeno)
-- [ ] ⭐ **Cherry-pick e revert** pelo menu de contexto do commit no histórico; reaproveita a tela de conflitos. (pequeno)
-- [ ] ⭐ **Tags**: criar, excluir e enviar tag pelo menu do commit. (pequeno)
 - [ ] **Rebase interativo**: reordenar, squash, editar mensagem e descartar commits arrastando na lista. (grande)
 - [ ] **Histórico e blame de um arquivo**: quem mudou cada linha e quando. (médio)
 - [ ] **Diff lado a lado**, além do diff unificado atual. (médio)
@@ -90,3 +87,4 @@ Recursos inspirados no Sourcetree, no GitKraken e no Fork, repensados para o est
 - [x] Busca de commits, histórico paginado e virtualizado, abas com vários repositórios
 - [x] Dashboard com perfil, contribuições e cards de projetos
 - [x] Login no GitHub (gh CLI / Device Flow) com volta para os dados locais quando offline
+- [x] Amend, cherry-pick e revert pelo menu do commit, tags (criar, excluir, enviar)

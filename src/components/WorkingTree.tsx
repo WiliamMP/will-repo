@@ -4,6 +4,8 @@ import { ask } from "@tauri-apps/plugin-dialog";
 import { openPath } from "@tauri-apps/plugin-opener";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
 import { BorderBeam } from "@/components/ui/border-beam";
@@ -18,16 +20,19 @@ type Props = {
   repo: string;
   status: Status;
   state: RepoState;
+  /** last commit is already on the remote: amending it needs a force push */
+  headPushed: boolean;
   run: (label: string, action: (path: string) => Promise<unknown>, success?: string) => Promise<boolean>;
 };
 
 // "Commit" tab: unstaged/staged lists, diff of the clicked file, message box
 type List = "unstaged" | "staged" | "conflicted";
 
-export function WorkingTree({ repo, status, state, run }: Props) {
+export function WorkingTree({ repo, status, state, headPushed, run }: Props) {
   const [pick, setPick] = useState<{ file: FileChange; list: List } | null>(null);
   const [diff, setDiff] = useState<DiffLine[] | null>(null);
   const [message, setMessage] = useState("");
+  const [amend, setAmend] = useState(false);
 
   // Reload the diff when the file is picked or the status changes (after stage, etc.)
   useEffect(() => {
@@ -97,11 +102,34 @@ export function WorkingTree({ repo, status, state, run }: Props) {
     );
   };
 
+  // Amend = rewrite the last commit; starts from its message. Git refuses it mid merge/rebase.
+  const toggleAmend = async (on: boolean) => {
+    setAmend(on);
+    if (on && !message.trim()) {
+      try {
+        setMessage(await git.headMessage(repo));
+      } catch (e) {
+        toast.error(String(e));
+      }
+    }
+  };
+
   // During a rebase, commits are made by "Continuar" in the banner
-  const canCommit = !!message.trim() && status.staged.length > 0 && state.kind !== "rebase";
+  const canCommit = !!message.trim() && (status.staged.length > 0 || amend) && state.kind !== "rebase";
   const commit = async () => {
     if (!canCommit) return;
-    if (await run("commit", (p) => git.commit(p, message.trim()), "Commit criado")) setMessage("");
+    if (amend && headPushed) {
+      const ok = await ask(
+        "O último commit já foi enviado (push). Alterá-lo reescreve o histórico e o próximo push vai precisar ser forçado.",
+        { title: "Amend", kind: "warning", okLabel: "Alterar mesmo assim", cancelLabel: "Cancelar" },
+      );
+      if (!ok) return;
+    }
+    const done = amend ? "Último commit alterado" : "Commit criado";
+    if (await run("commit", (p) => git.commit(p, message.trim(), amend), done)) {
+      setMessage("");
+      setAmend(false);
+    }
   };
 
   const iconBtn = (label: string, icon: React.ReactNode, onClick: () => void) => (
@@ -221,7 +249,18 @@ export function WorkingTree({ repo, status, state, run }: Props) {
             <BorderBeam size={80} duration={8} colorFrom="var(--primary)" colorTo="var(--lane-2)" />
           )}
         </div>
-        <div className="flex justify-end">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Checkbox
+              id="amend"
+              checked={amend}
+              disabled={!!state.kind}
+              onCheckedChange={(v) => toggleAmend(v === true)}
+            />
+            <Label htmlFor="amend" className="text-xs text-muted-foreground" title="Substitui o último commit pela mensagem e arquivos preparados">
+              Alterar último commit
+            </Label>
+          </div>
           <ShimmerButton
             background="var(--primary)"
             borderRadius="8px"
@@ -230,7 +269,7 @@ export function WorkingTree({ repo, status, state, run }: Props) {
             disabled={!canCommit}
             onClick={commit}
           >
-            <GitCommitHorizontal className="size-3.5" /> Commit
+            <GitCommitHorizontal className="size-3.5" /> {amend ? "Amend" : "Commit"}
           </ShimmerButton>
         </div>
       </div>

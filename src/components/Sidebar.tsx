@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
-import { Archive, Cloud, GitBranch, GitMerge, GitPullRequestArrow, LogIn, Search, Tag, Trash2 } from "lucide-react";
+import { Archive, ArrowUpFromLine, Cloud, GitBranch, GitMerge, GitPullRequestArrow, LogIn, Search, Tag, Trash2 } from "lucide-react";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -18,6 +18,8 @@ export type BranchActions = {
   merge: (name: string) => void;
   rebase: (name: string) => void;
   remove: (name: string) => void;
+  pushTag: (name: string) => void;
+  deleteTag: (name: string) => void;
 };
 
 type Props = {
@@ -86,7 +88,22 @@ export function Sidebar({ refs, stashes, selectedStash, onSelectStash, actions }
             onOpen={(n) => actions.checkout(n, true)}
             menu={(n) => branchMenu(n, true)}
           />
-          <Section title="Tags" icon={Tag} items={match(refs.tags)} />
+          <Section
+            title="Tags"
+            icon={Tag}
+            items={match(refs.tags)}
+            menu={(n) => (
+              <>
+                <ContextMenuItem onSelect={() => actions.pushTag(n)}>
+                  <ArrowUpFromLine /> Enviar {n} para origin
+                </ContextMenuItem>
+                <ContextMenuSeparator />
+                <ContextMenuItem variant="destructive" onSelect={() => actions.deleteTag(n)}>
+                  <Trash2 /> Excluir {n}
+                </ContextMenuItem>
+              </>
+            )}
+          />
           {stashes.length > 0 && (
             <div>
               <SectionTitle>Stashes</SectionTitle>

@@ -1,8 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { ChevronsDown, Loader2, Search, X } from "lucide-react";
+import { ChevronsDown, CirclePlus, Copy, Loader2, Search, Tag, Undo2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
 import { Input } from "@/components/ui/input";
 import { Graph, graphWidth } from "@/components/Graph";
 import { RefBadge } from "@/components/RefBadge";
@@ -11,6 +18,12 @@ import { cn } from "@/lib/utils";
 
 const ROW = 28; // h-7, must match Graph.tsx
 
+export type CommitActions = {
+  cherryPick: (commit: Commit) => void;
+  revert: (commit: Commit) => void;
+  tag: (commit: Commit) => void;
+};
+
 type Props = {
   repo: string;
   commits: Commit[];
@@ -18,9 +31,10 @@ type Props = {
   onSelect: (commit: Commit) => void;
   hasMore: boolean;
   onLoadMore: () => Promise<unknown>;
+  actions: CommitActions;
 };
 
-export function History({ repo, commits, selected, onSelect, hasMore, onLoadMore }: Props) {
+export function History({ repo, commits, selected, onSelect, hasMore, onLoadMore, actions }: Props) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<Commit[] | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -107,27 +121,47 @@ export function History({ repo, commits, selected, onSelect, hasMore, onLoadMore
           {items.map((item) => {
             const c = rows[item.index];
             return (
-              <div
-                key={c.hash}
-                style={{ ...cols, transform: `translateY(${item.start}px)` }}
-                onClick={() => onSelect(c)}
-                className={cn(
-                  "absolute top-0 left-0 grid h-7 w-full cursor-pointer items-center gap-2 pr-3 hover:bg-muted/60",
-                  c.hash === selected && "bg-accent shadow-[inset_2px_0_0_var(--primary)] hover:bg-accent",
-                )}
-              >
-                <span />
-                <span className="flex min-w-0 items-center gap-1">
-                  {c.refs.map((r) => (
-                    <RefBadge key={r.kind + r.name} refInfo={r} lane={c.lane} />
-                  ))}
-                  <span className="truncate" title={c.subject}>
-                    {c.subject}
-                  </span>
-                </span>
-                <span className="truncate text-xs text-muted-foreground">{c.author}</span>
-                <span className="truncate text-xs text-muted-foreground">{relativeDate(c.timestamp)}</span>
-              </div>
+              <ContextMenu key={c.hash}>
+                <ContextMenuTrigger asChild>
+                  <div
+                    style={{ ...cols, transform: `translateY(${item.start}px)` }}
+                    onClick={() => onSelect(c)}
+                    className={cn(
+                      "absolute top-0 left-0 grid h-7 w-full cursor-pointer items-center gap-2 pr-3 hover:bg-muted/60",
+                      c.hash === selected && "bg-accent shadow-[inset_2px_0_0_var(--primary)] hover:bg-accent",
+                    )}
+                  >
+                    <span />
+                    <span className="flex min-w-0 items-center gap-1">
+                      {c.refs.map((r) => (
+                        <RefBadge key={r.kind + r.name} refInfo={r} lane={c.lane} />
+                      ))}
+                      <span className="truncate" title={c.subject}>
+                        {c.subject}
+                      </span>
+                    </span>
+                    <span className="truncate text-xs text-muted-foreground">{c.author}</span>
+                    <span className="truncate text-xs text-muted-foreground">{relativeDate(c.timestamp)}</span>
+                  </div>
+                </ContextMenuTrigger>
+                <ContextMenuContent>
+                  <ContextMenuItem onSelect={() => actions.cherryPick(c)}>
+                    <CirclePlus /> Cherry-pick neste HEAD
+                  </ContextMenuItem>
+                  <ContextMenuItem onSelect={() => actions.revert(c)}>
+                    <Undo2 /> Reverter commit
+                  </ContextMenuItem>
+                  <ContextMenuSeparator />
+                  <ContextMenuItem onSelect={() => actions.tag(c)}>
+                    <Tag /> Criar tag aqui
+                  </ContextMenuItem>
+                  <ContextMenuItem
+                    onSelect={() => navigator.clipboard.writeText(c.hash).then(() => toast.success("Hash copiado"))}
+                  >
+                    <Copy /> Copiar hash
+                  </ContextMenuItem>
+                </ContextMenuContent>
+              </ContextMenu>
             );
           })}
         </div>

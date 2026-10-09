@@ -90,7 +90,14 @@ export const git = {
   stage: (repo: string, files: string[]) => invoke<void>("stage", { repo, files }),
   unstage: (repo: string, files: string[]) => invoke<void>("unstage", { repo, files }),
   discard: (repo: string, files: FileChange[]) => invoke<void>("discard", { repo, files }),
-  commit: (repo: string, message: string) => invoke<void>("commit", { repo, message }),
+  commit: (repo: string, message: string, amend: boolean) => invoke<void>("commit", { repo, message, amend }),
+  headMessage: (repo: string) => invoke<string>("head_message", { repo }),
+  /** cherry-pick onto HEAD, or revert (new commit that undoes it) */
+  pick: (repo: string, hash: string, revert: boolean) => invoke<void>("pick", { repo, hash, revert }),
+  createTag: (repo: string, name: string, hash: string, message: string) =>
+    invoke<void>("create_tag", { repo, name, hash, message }),
+  deleteTag: (repo: string, name: string) => invoke<void>("delete_tag", { repo, name }),
+  pushTag: (repo: string, name: string) => invoke<void>("push_tag", { repo, name }),
   fetch: (repo: string) => invoke<void>("fetch", { repo }),
   pull: (repo: string) => invoke<void>("pull", { repo }),
   push: (repo: string) => invoke<void>("push", { repo }),

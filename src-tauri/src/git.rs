@@ -262,9 +262,20 @@ pub fn discard(repo: String, files: Vec<FileChange>) -> Res<()> {
     Ok(())
 }
 
+/// `amend` replaces the last commit (new message + whatever is staged)
 #[tauri::command(async)]
-pub fn commit(repo: String, message: String) -> Res<()> {
-    git(&repo, &["commit", "-m", &message]).map(drop)
+pub fn commit(repo: String, message: String, amend: bool) -> Res<()> {
+    let mut args = vec!["commit", "-m", &message];
+    if amend {
+        args.push("--amend");
+    }
+    git(&repo, &args).map(drop)
+}
+
+/// Full message of the last commit, to pre-fill the box when amending
+#[tauri::command(async)]
+pub fn head_message(repo: String) -> Res<String> {
+    Ok(git(&repo, &["log", "-1", "--format=%B"])?.trim_end().to_string())
 }
 
 #[tauri::command(async)]
@@ -382,6 +393,44 @@ pub fn rebase(repo: String, onto: String) -> Res<()> {
 #[tauri::command(async)]
 pub fn delete_branch(repo: String, name: String, force: bool) -> Res<()> {
     git(&repo, &["branch", if force { "-D" } else { "-d" }, &name]).map(drop)
+}
+
+// ---------- Cherry-pick, revert, tags ----------
+
+/// Copies a commit onto HEAD (cherry-pick) or adds a commit that undoes it (revert).
+/// Conflicts leave the operation in progress, handled by `repo_state`/`operation`.
+#[tauri::command(async)]
+pub fn pick(repo: String, hash: String, revert: bool) -> Res<()> {
+    let mut args = vec![if revert { "revert" } else { "cherry-pick" }, "--no-edit"];
+    // a merge commit has two parents: compare against the first one (the branch it was merged into)
+    let parent2 = format!("{hash}^2");
+    if git(&repo, &["rev-parse", "--verify", "--quiet", &parent2]).is_ok() {
+        args.extend(["-m", "1"]);
+    }
+    args.push(&hash);
+    git(&repo, &args).map(drop)
+}
+
+/// Annotated tag when there is a message, lightweight otherwise
+#[tauri::command(async)]
+pub fn create_tag(repo: String, name: String, hash: String, message: String) -> Res<()> {
+    let msg = message.trim();
+    if msg.is_empty() {
+        git(&repo, &["tag", &name, &hash]).map(drop)
+    } else {
+        git(&repo, &["tag", "-a", &name, "-m", msg, &hash]).map(drop)
+    }
+}
+
+/// Local only; a tag already pushed stays on the remote
+#[tauri::command(async)]
+pub fn delete_tag(repo: String, name: String) -> Res<()> {
+    git(&repo, &["tag", "-d", &name]).map(drop)
+}
+
+#[tauri::command(async)]
+pub fn push_tag(repo: String, name: String) -> Res<()> {
+    git(&repo, &["push", "origin", &format!("refs/tags/{name}")]).map(drop)
 }
 
 // ---------- Operation in progress (merge/rebase/cherry-pick/revert) ----------
@@ -720,7 +769,7 @@ mod tests {
         stage(r(), vec!["a.txt".into()]).unwrap();
         unstage(r(), vec!["a.txt".into()]).unwrap(); // works without HEAD
         stage(r(), vec!["a.txt".into()]).unwrap();
-        commit(r(), "first".into()).unwrap();
+        commit(r(), "first".into(), false).unwrap();
 
         create_branch(r(), "feature/x".into(), true).unwrap();
         std::fs::write(dir.join("a.txt"), "one\ntwo\n").unwrap();
@@ -729,7 +778,7 @@ mod tests {
             .iter()
             .any(|l| l.kind == parse::DiffKind::Add && l.text == "two"));
         stage(r(), vec!["a.txt".into()]).unwrap();
-        commit(r(), "second".into()).unwrap();
+        commit(r(), "second".into(), false).unwrap();
 
         checkout(r(), "main".into(), false).unwrap();
         git(
@@ -768,7 +817,7 @@ mod tests {
         let lines: Vec<String> = (1..=20).map(|n| format!("line {n}")).collect();
         std::fs::write(dir.join("long.txt"), lines.join("\n") + "\n").unwrap();
         stage(r(), vec!["long.txt".into()]).unwrap();
-        commit(r(), "long".into()).unwrap();
+        commit(r(), "long".into(), false).unwrap();
         let mut edited = lines.clone();
         edited[0] = "FIRST".into();
         edited[19] = "LAST".into();
@@ -789,7 +838,7 @@ mod tests {
         // Line staging: both lines change, stage only the first one
         std::fs::write(dir.join("pair.txt"), "x\ny\n").unwrap();
         stage(r(), vec!["pair.txt".into()]).unwrap();
-        commit(r(), "pair".into()).unwrap();
+        commit(r(), "pair".into(), false).unwrap();
         std::fs::write(dir.join("pair.txt"), "X\nY\n").unwrap();
         // body: 0 "-x", 1 "-y", 2 "+X", 3 "+Y"
         apply_hunk(
@@ -951,6 +1000,66 @@ mod tests {
         git(&repo, &["switch", "-q", "main"]).unwrap();
         assert!(delete_branch(r(), "feature".into(), false).is_err());
         delete_branch(r(), "feature".into(), true).unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn amend_pick_revert_tags() {
+        let (dir, repo) = temp_repo("pick");
+        let r = || repo.clone();
+
+        // amend: message only, then with a staged file
+        commit(r(), "base editado".into(), true).unwrap();
+        assert_eq!(head_message(r()).unwrap(), "base editado");
+        std::fs::write(dir.join("g.txt"), "g
+").unwrap();
+        stage(r(), vec!["g.txt".into()]).unwrap();
+        commit(r(), "base com g".into(), true).unwrap();
+        assert_eq!(log(r(), 10).unwrap().len(), 1);
+        assert!(status(r()).unwrap().staged.is_empty());
+
+        // cherry-pick a commit from feature onto main, then revert it
+        git(&repo, &["switch", "-q", "-c", "feature"]).unwrap();
+        std::fs::write(dir.join("h.txt"), "h
+").unwrap();
+        git(&repo, &["add", "."]).unwrap();
+        git(&repo, &["commit", "-q", "-m", "add h"]).unwrap();
+        let h = git(&repo, &["rev-parse", "HEAD"]).unwrap().trim().to_string();
+        git(&repo, &["switch", "-q", "main"]).unwrap();
+        pick(r(), h.clone(), false).unwrap();
+        assert!(dir.join("h.txt").exists());
+        pick(r(), "HEAD".into(), true).unwrap();
+        assert!(!dir.join("h.txt").exists());
+        assert!(head_message(r()).unwrap().starts_with("Revert \"add h\""));
+
+        // conflicting cherry-pick stays in progress until aborted
+        std::fs::write(dir.join("f.txt"), "main
+").unwrap();
+        git(&repo, &["commit", "-q", "-am", "main f"]).unwrap();
+        git(&repo, &["switch", "-q", "feature"]).unwrap();
+        std::fs::write(dir.join("f.txt"), "feature
+").unwrap();
+        git(&repo, &["commit", "-q", "-am", "feature f"]).unwrap();
+        git(&repo, &["switch", "-q", "main"]).unwrap();
+        assert!(pick(r(), "feature".into(), false).is_err());
+        assert_eq!(repo_state(r()).unwrap().kind, Some("cherry-pick"));
+        operation(r(), OpAction::Abort).unwrap();
+        assert_eq!(repo_state(r()).unwrap().kind, None);
+
+        // merge commit: picked with -m 1
+        git(&repo, &["merge", "-q", "--no-ff", "-X", "theirs", "-m", "merge feature", "feature"]).unwrap();
+        pick(r(), "HEAD".into(), true).unwrap();
+        assert_eq!(std::fs::read_to_string(dir.join("f.txt")).unwrap(), "main
+");
+
+        // tags: lightweight and annotated
+        create_tag(r(), "v1".into(), h.clone(), "".into()).unwrap();
+        create_tag(r(), "v2".into(), "HEAD".into(), "versão 2".into()).unwrap();
+        assert_eq!(refs(r()).unwrap().tags, vec!["v1", "v2"]);
+        assert_eq!(git(&repo, &["cat-file", "-t", "v2"]).unwrap().trim(), "tag");
+        delete_tag(r(), "v1".into()).unwrap();
+        assert_eq!(refs(r()).unwrap().tags, vec!["v2"]);
+        assert!(push_tag(r(), "v2".into()).is_err()); // no origin
         let _ = std::fs::remove_dir_all(&dir);
     }
 
