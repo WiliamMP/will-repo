@@ -57,7 +57,6 @@ Recursos inspirados no Sourcetree, no GitKraken e no Fork, repensados para o est
 
 ### Commits
 
-- [ ] **Assistente de mensagem** [mensagens recentes do Fork]: chips de Conventional Commits (feat, fix, chore...), mensagens recentes e contador de caracteres do título. (pequeno)
 - [ ] **Mensagem de commit sugerida por IA** [GitKraken]: gerar a mensagem a partir do diff preparado, com Claude. (médio)
 - [ ] **Identidade por pasta** [perfis do GitKraken]: usar nome e email de trabalho ou pessoal automaticamente conforme a pasta do repositório. (pequeno)
 - [ ] **Assinatura GPG/SSH** [Fork]: assinar commits e mostrar o selo "verificado" no histórico. (médio)
@@ -88,3 +87,4 @@ Recursos inspirados no Sourcetree, no GitKraken e no Fork, repensados para o est
 - [x] Amend, cherry-pick e revert pelo menu do commit, tags (criar, excluir, enviar)
 - [x] Pull Requests: lista dos abertos com CI e revisão, criar PR da branch atual (com push automático)
 - [x] Descartar sem medo: backup antes de cada descarte, "Desfazer" no aviso e lista de descartes recentes
+- [x] Assistente de mensagem: chips de Conventional Commits, mensagens recentes e contador do título

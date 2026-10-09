@@ -10,6 +10,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
 import { BorderBeam } from "@/components/ui/border-beam";
 import { ShimmerButton } from "@/components/ui/shimmer-button";
+import { CommitAssist } from "@/components/CommitAssist";
 import { ConflictView, sideNames } from "@/components/ConflictView";
 import { DiffView } from "@/components/DiffView";
 import { DiscardsDialog } from "@/components/DiscardsDialog";
@@ -23,13 +24,15 @@ type Props = {
   state: RepoState;
   /** last commit is already on the remote: amending it needs a force push */
   headPushed: boolean;
+  /** recent commit subjects for the message assistant */
+  recent: string[];
   run: (label: string, action: (path: string) => Promise<unknown>, success?: string) => Promise<boolean>;
 };
 
 // "Commit" tab: unstaged/staged lists, diff of the clicked file, message box
 type List = "unstaged" | "staged" | "conflicted";
 
-export function WorkingTree({ repo, status, state, headPushed, run }: Props) {
+export function WorkingTree({ repo, status, state, headPushed, recent, run }: Props) {
   const [pick, setPick] = useState<{ file: FileChange; list: List } | null>(null);
   const [diff, setDiff] = useState<DiffLine[] | null>(null);
   const [message, setMessage] = useState("");
@@ -234,6 +237,7 @@ export function WorkingTree({ repo, status, state, headPushed, run }: Props) {
       )}
 
       <div className="flex flex-col gap-2 border-t p-3">
+        <CommitAssist message={message} onChange={setMessage} recent={recent} disabled={state.kind === "rebase"} />
         <div className="relative overflow-hidden rounded-lg">
           <Textarea
             placeholder={state.kind === "rebase" ? "Rebase em andamento: use Continuar no aviso acima" : "Mensagem do commit... (Ctrl+Enter)"}

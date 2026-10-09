@@ -277,6 +277,7 @@ export function RepoView({ path }: { path: string }) {
                 status={data.status}
                 state={data.state}
                 headPushed={!!data.tracking.upstream && data.tracking.ahead === 0}
+                recent={[...new Set(commits.slice(0, 30).map((c) => c.subject))].slice(0, 8)}
                 run={run}
               />
             </TabsContent>
