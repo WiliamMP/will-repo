@@ -1,0 +1,56 @@
+# Weekly dependency updates, grouped so they arrive as a few PRs, each checked by CI
+# (Rust tests, frontend tests, end-to-end tests and the build).
+# Security fixes are separate and immediate (repo Settings > Dependabot security updates).
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "08:00"
+      timezone: America/Sao_Paulo
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      # npm side of Tauri moves together with the Rust side (see cargo below)
+      tauri:
+        patterns: ["@tauri-apps/*"]
+      minor-e-patch:
+        update-types: [minor, patch]
+    ignore:
+      # WebdriverIO 10 breaks `npm install` (npm 10 arborist error); stay on 9 for now
+      - dependency-name: "webdriverio"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@wdio/*"
+        update-types: ["version-update:semver-major"]
+
+  - package-ecosystem: cargo
+    directory: /src-tauri
+    schedule:
+      interval: weekly
+      day: monday
+      time: "08:00"
+      timezone: America/Sao_Paulo
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      tauri:
+        patterns: ["tauri", "tauri-*"]
+      minor-e-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "08:00"
+      timezone: America/Sao_Paulo
+    commit-message:
+      prefix: "ci(deps)"
+    groups:
+      actions:
+        patterns: ["*"]
