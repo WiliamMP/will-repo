@@ -65,6 +65,16 @@ describe("will-repo", () => {
     expect(git("status", "--porcelain")).toBe("");
   });
 
+  it("nada foi bloqueado pelo Content Security Policy", async () => {
+    // visit the screens with images and the terminal, then check what the app logged
+    await $("button*=Pull Requests").click();
+    await $("button*=Detalhes").click();
+    await browser.keys(["Control", "`"]);
+    await $(".xterm").waitForDisplayed();
+    await browser.keys(["Control", "`"]);
+    expect(await browser.execute(() => window.__cspViolations)).toEqual([]);
+  });
+
   it("paleta de comandos (Ctrl+K) executa uma ação", async () => {
     await browser.keys(["Control", "k"]);
     const input = $('input[placeholder="O que você quer fazer?"]');
