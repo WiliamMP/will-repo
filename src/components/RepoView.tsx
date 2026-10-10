@@ -55,7 +55,7 @@ const confirm = (message: string, title: string, okLabel: string) =>
 // Everything for one open repository. Each tab mounts its own RepoView.
 export function RepoView({ path }: { path: string }) {
   const api = useRepo(path);
-  const { repo, data, busy, error, run, reload, loadMore } = api;
+  const { repo, data, busy, error, run, reload, loadMore, focus, setFocus } = api;
   const [selected, setSelected] = useState<Commit | null>(null);
   const [stashName, setStashName] = useState<string | null>(null);
   const [tab, setTab] = useState("details");
@@ -75,7 +75,7 @@ export function RepoView({ path }: { path: string }) {
 
   const commits = data?.commits ?? [];
   // Default selection: newest commit. After a reload, refresh the object by hash.
-  const commit = commits.find((c) => c.hash === selected?.hash) ?? selected ?? commits[0] ?? null;
+  const commit = commits.find((c) => c.hash === selected?.hash) ?? selected ?? commits.find((c) => !c.stash) ?? null;
   const changes = data ? data.status.staged.length + data.status.unstaged.length + data.status.conflicted.length : 0;
   const stash = data?.stashes.find((s) => s.name === stashName);
   const head = data?.refs.head ?? "HEAD";
@@ -168,6 +168,12 @@ export function RepoView({ path }: { path: string }) {
       }
       reload();
     },
+    solo: (name) => setFocus({ solo: name, hidden: [] }),
+    toggleHidden: (name) =>
+      setFocus({
+        solo: null,
+        hidden: focus.hidden.includes(name) ? focus.hidden.filter((h) => h !== name) : [...focus.hidden, name],
+      }),
     pushTag: (name) => run("push", (p) => git.pushTag(p, name), `Tag ${name} enviada`),
     deleteTag: async (name) => {
       if (await confirm(`Excluir a tag ${name}? Se já foi enviada, ela continua no remote.`, "Excluir tag", "Excluir"))
@@ -320,6 +326,7 @@ export function RepoView({ path }: { path: string }) {
               setTab("details");
             }}
             actions={branchActions}
+            hidden={focus.hidden}
           />
         </ResizablePanel>
         <ResizableHandle />
@@ -332,9 +339,15 @@ export function RepoView({ path }: { path: string }) {
             hasMore={data.hasMore}
             onLoadMore={loadMore}
             actions={commitActions}
+            focus={focus}
+            onClearFocus={() => setFocus({ solo: null, hidden: [] })}
             onSelect={(c) => {
-              setSelected(c);
-              setStashName(null);
+              // a stash node in the graph opens the stash details, like the sidebar
+              if (c.stash) setStashName(c.stash);
+              else {
+                setSelected(c);
+                setStashName(null);
+              }
               setTab("details");
             }}
           />

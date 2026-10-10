@@ -3,6 +3,7 @@ import { toast } from "sonner";
 import {
   git,
   type Commit,
+  type Focus,
   type Refs,
   type RepoInfo,
   type RepoState,
@@ -32,13 +33,31 @@ export function useRepo(path: string) {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const limit = useRef(PAGE);
+  // focus mode is remembered per repository
+  const focusKey = `will-repo.focus:${path}`;
+  const [focus, setFocusState] = useState<Focus>(() => {
+    try {
+      return { solo: null, hidden: [], ...JSON.parse(localStorage.getItem(focusKey) ?? "{}") };
+    } catch {
+      return { solo: null, hidden: [] };
+    }
+  });
+  const setFocus = useCallback(
+    (f: Focus) => {
+      setFocusState(f);
+      try {
+        localStorage.setItem(focusKey, JSON.stringify(f));
+      } catch {}
+    },
+    [focusKey],
+  );
 
   const reload = useCallback(async () => {
     if (!repo) return;
     try {
       const p = repo.path;
       const [commits, refs, status, tracking, stashes, state] = await Promise.all([
-        git.log(p, limit.current),
+        git.log(p, limit.current, focus),
         git.refs(p),
         git.status(p),
         git.tracking(p),
@@ -49,7 +68,7 @@ export function useRepo(path: string) {
     } catch (e) {
       toast.error(String(e));
     }
-  }, [repo]);
+  }, [repo, focus]);
 
   useEffect(() => {
     git.openRepo(path).then(setRepo, (e) => setError(String(e)));
@@ -84,7 +103,7 @@ export function useRepo(path: string) {
     [repo, reload],
   );
 
-  return { repo, data, busy, error, run, reload, loadMore };
+  return { repo, data, busy, error, run, reload, loadMore, focus, setFocus };
 }
 
 export type RepoApi = ReturnType<typeof useRepo>;

@@ -17,6 +17,8 @@ pub enum RefKind {
     Branch,
     Remote,
     Tag,
+    /// a stash shown as its own node in the graph
+    Stash,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -25,11 +27,15 @@ pub struct Commit {
     pub hash: String,
     pub parents: Vec<String>,
     pub author: String,
+    /// for the author's avatar
+    pub email: String,
     pub timestamp: i64,
     pub refs: Vec<RefLabel>,
     pub subject: String,
     /// Column in the graph, filled by `assign_lanes`
     pub lane: usize,
+    /// "stash@{0}" when this node is a stash, not a commit
+    pub stash: Option<String>,
 }
 
 /// Field and record separators used in the `git log --format` string
@@ -43,17 +49,19 @@ pub fn parse_log(out: &str) -> Vec<Commit> {
         .filter(|r| !r.is_empty())
         .filter_map(|record| {
             let f: Vec<&str> = record.split(FS).collect();
-            if f.len() < 6 {
+            if f.len() < 7 {
                 return None;
             }
             Some(Commit {
                 hash: f[0].to_string(),
                 parents: f[1].split_whitespace().map(String::from).collect(),
                 author: f[2].to_string(),
-                timestamp: f[3].parse().unwrap_or(0),
-                refs: parse_decorations(f[4]),
-                subject: f[5].to_string(),
+                email: f[3].to_string(),
+                timestamp: f[4].parse().unwrap_or(0),
+                refs: parse_decorations(f[5]),
+                subject: f[6].to_string(),
                 lane: 0,
+                stash: None,
             })
         })
         .collect()
@@ -91,6 +99,49 @@ pub fn parse_decorations(d: &str) -> Vec<RefLabel> {
 /// Gives each commit a column so branches don't overlap.
 /// `lanes[i]` holds the hash that column i is waiting for (the next parent to draw).
 /// Commits must come children-before-parents (git log --date-order does that).
+/// Parses `git stash list` with STASH_LOG_FORMAT into graph nodes.
+/// A stash commit has 2-3 parents (base, index, untracked files); only the base is kept,
+/// so the node hangs from the commit it was created on.
+pub fn parse_stash_nodes(out: &str) -> Vec<Commit> {
+    out.split(RS)
+        .map(str::trim)
+        .filter(|r| !r.is_empty())
+        .filter_map(|record| {
+            let f: Vec<&str> = record.split(FS).collect();
+            if f.len() < 7 {
+                return None;
+            }
+            Some(Commit {
+                hash: f[0].to_string(),
+                parents: f[1].split_whitespace().take(1).map(String::from).collect(),
+                author: f[2].to_string(),
+                email: f[3].to_string(),
+                timestamp: f[4].parse().unwrap_or(0),
+                refs: vec![RefLabel { name: f[5].to_string(), kind: RefKind::Stash }],
+                subject: f[6].to_string(),
+                lane: 0,
+                stash: Some(f[5].to_string()),
+            })
+        })
+        .collect()
+}
+
+/// Puts each stash node above its base commit, at its place in time
+pub fn insert_stashes(commits: &mut Vec<Commit>, stashes: Vec<Commit>) {
+    // oldest first, so newer stashes of the same base end up on top
+    for s in stashes.into_iter().rev() {
+        let base = s.parents.first().and_then(|p| commits.iter().position(|c| &c.hash == p));
+        let by_time = commits.iter().position(|c| c.timestamp < s.timestamp);
+        let at = match (base, by_time) {
+            (Some(b), Some(t)) => b.min(t),
+            (Some(b), None) => b,
+            (None, Some(t)) => t,
+            (None, None) => commits.len(),
+        };
+        commits.insert(at, s);
+    }
+}
+
 pub fn assign_lanes(commits: &mut [Commit]) {
     let mut lanes: Vec<Option<String>> = Vec::new();
 
@@ -657,22 +708,25 @@ mod tests {
             hash: hash.into(),
             parents: parents.iter().map(|p| p.to_string()).collect(),
             author: String::new(),
+            email: String::new(),
             timestamp: 0,
             refs: vec![],
             subject: String::new(),
             lane: 0,
+            stash: None,
         }
     }
 
     #[test]
     fn log_record() {
         let out = format!(
-            "abc{FS}p1 p2{FS}Will{FS}1700000000{FS}HEAD -> refs/heads/main{FS}feat: x{RS}\n"
+            "abc{FS}p1 p2{FS}Will{FS}w@x{FS}1700000000{FS}HEAD -> refs/heads/main{FS}feat: x{RS}\n"
         );
         let c = &parse_log(&out)[0];
         assert_eq!(c.hash, "abc");
         assert_eq!(c.parents, vec!["p1", "p2"]);
         assert_eq!(c.timestamp, 1_700_000_000);
+        assert_eq!(c.email, "w@x");
         assert_eq!(c.subject, "feat: x");
         assert_eq!(
             c.refs[0],
@@ -685,9 +739,27 @@ mod tests {
 
     #[test]
     fn subject_with_separator_like_text() {
-        let out = format!("a{FS}{FS}W{FS}1{FS}{FS}fix: a, b | c{RS}");
+        let out = format!("a{FS}{FS}W{FS}w@x{FS}1{FS}{FS}fix: a, b | c{RS}");
         assert_eq!(parse_log(&out)[0].subject, "fix: a, b | c");
         assert!(parse_log(&out)[0].parents.is_empty());
+    }
+
+    #[test]
+    fn stash_nodes_hang_from_their_base() {
+        let out = format!("s1{FS}b i u{FS}W{FS}w@x{FS}150{FS}stash@{{0}}{FS}On main: wip{RS}");
+        let stashes = parse_stash_nodes(&out);
+        assert_eq!(stashes[0].parents, vec!["b"]);
+        assert_eq!(stashes[0].stash.as_deref(), Some("stash@{0}"));
+        assert_eq!(stashes[0].refs[0].kind, RefKind::Stash);
+
+        let mut c = vec![commit("c", &["b"]), commit("b", &["a"]), commit("a", &[])];
+        (c[0].timestamp, c[1].timestamp, c[2].timestamp) = (300, 100, 50);
+        insert_stashes(&mut c, stashes);
+        let order: Vec<_> = c.iter().map(|c| c.hash.as_str()).collect();
+        // newer than b, older than c
+        assert_eq!(order, vec!["c", "s1", "b", "a"]);
+        assign_lanes(&mut c);
+        assert_ne!(c[1].lane, c[0].lane); // its own column
     }
 
     #[test]

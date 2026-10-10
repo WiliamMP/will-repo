@@ -22,6 +22,15 @@ export function Graph({ commits, selected, from, to }: Props) {
   const index = new Map(commits.map((c, i) => [c.hash, i]));
   const height = commits.length * ROW;
 
+  // HEAD's first-parent chain: "where I am" glows, the rest of the graph stays calm
+  const headPath = new Set<string>();
+  for (let i = commits.findIndex((c) => c.refs.some((r) => r.kind === "head")); i >= 0; ) {
+    headPath.add(commits[i].hash);
+    const next = index.get(commits[i].parents[0]);
+    if (next === undefined) break;
+    i = next;
+  }
+
   const visible = (a: number, b: number) => a <= to && b >= from;
 
   const edges = commits
@@ -32,7 +41,9 @@ export function Graph({ commits, selected, from, to }: Props) {
         if (!visible(i, p ?? commits.length)) return null;
         const [x1, y1] = [x(c.lane), y(i)];
         // Parent outside the loaded history: run the line off the bottom
-        if (p === undefined) return { d: `M${x1},${y1} V${height}`, lane: c.lane, key: `${i}-${n}` };
+        const glow = n === 0 && headPath.has(c.hash);
+        const dashed = !!c.stash;
+        if (p === undefined) return { d: `M${x1},${y1} V${height}`, lane: c.lane, key: `${i}-${n}`, glow, dashed };
 
         const parent = commits[p];
         const [x2, y2] = [x(parent.lane), y(p)];
@@ -40,7 +51,7 @@ export function Graph({ commits, selected, from, to }: Props) {
         if (x1 === x2) d = `M${x1},${y1} V${y2}`;
         else if (n === 0) d = `M${x1},${y1} V${y2 - ROW} C${x1},${y2 - ROW / 2} ${x2},${y2 - ROW / 2} ${x2},${y2}`;
         else d = `M${x1},${y1} C${x1},${y1 + ROW / 2} ${x2},${y1 + ROW / 2} ${x2},${y1 + ROW} V${y2}`;
-        return { d, lane: n === 0 ? c.lane : parent.lane, key: `${i}-${n}` };
+        return { d, lane: n === 0 ? c.lane : parent.lane, key: `${i}-${n}`, glow, dashed };
       }),
     )
     .filter((e) => e !== null);
@@ -48,10 +59,34 @@ export function Graph({ commits, selected, from, to }: Props) {
   return (
     <svg width={graphWidth(commits)} height={height} className="block">
       {edges.map((e) => (
-        <path key={e.key} d={e.d} fill="none" stroke={color(e.lane)} strokeWidth={2} />
+        <path
+          key={e.key}
+          d={e.d}
+          fill="none"
+          stroke={color(e.lane)}
+          strokeWidth={e.glow ? 2.5 : 2}
+          strokeDasharray={e.dashed ? "3 3" : undefined}
+          style={e.glow ? { filter: `drop-shadow(0 0 3px ${color(e.lane)})` } : undefined}
+        />
       ))}
       {commits.slice(from, to + 1).map((c, k) => {
         const i = from + k;
+        // a stash is a small dashed square hanging from its base commit
+        if (c.stash)
+          return (
+            <rect
+              key={c.hash}
+              x={x(c.lane) - 4.5}
+              y={y(i) - 4.5}
+              width={9}
+              height={9}
+              rx={2}
+              fill="var(--background)"
+              stroke="var(--muted-foreground)"
+              strokeWidth={i === selected ? 2.5 : 1.5}
+              strokeDasharray="2 2"
+            />
+          );
         return (
           <circle
             key={c.hash}

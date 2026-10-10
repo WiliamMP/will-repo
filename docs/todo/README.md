@@ -40,11 +40,7 @@ Recursos inspirados no Sourcetree, no GitKraken e no Fork, repensados para o est
 ### Grafo e histórico
 
 - [ ] **Arrastar e soltar no grafo** [GitKraken]: arrastar uma branch sobre outra abre "Mesclar / Rebase / Cherry-pick". (médio)
-- [ ] **Modo foco** [hide/solo do GitKraken]: esconder branches ou isolar uma só no grafo, com destaque neon no caminho do HEAD. (médio)
-- [ ] **Avatares nos commits** [GitKraken]: foto do autor (GitHub/Gravatar) no nó do grafo ou ao lado do autor. (pequeno)
 - [ ] **Navegar pelos arquivos em qualquer commit** [Fork]: árvore de pastas daquele ponto do histórico, com visualização do conteúdo. (médio)
-- [ ] **Stashes no grafo** [Fork]: stashes como nós especiais no histórico, presos ao commit de origem. (pequeno)
-- [ ] **Minimapa do grafo** [GitKraken]: barra lateral com a densidade de commits e marcadores de branches e tags para pular rápido. (médio)
 
 ### Diff e conflitos
 
@@ -87,3 +83,4 @@ Recursos inspirados no Sourcetree, no GitKraken e no Fork, repensados para o est
 - [x] Tela de configurações no estilo do Discord: conta, identidade (global e por pasta), aparência (tema, zoom), git (fetch automático, modo do pull), diff (contexto, espaços), integrações (editor, terminal), atalhos e sobre
 - [x] Splash screen enquanto o app carrega; ícone próprio (fonte em `src-tauri/icons/icon.svg`, gere os tamanhos com `npx tauri icon`); instaladores com `npm run tauri build` (NSIS em português e MSI em `src-tauri/target/release/bundle/`)
 - [x] Paleta de comandos (Ctrl+K): abas, recentes, tema, configurações, fetch/pull/push, branches, painéis e operações
+- [x] Grafo: avatares dos autores, stashes como nós, modo foco (isolar/esconder branches) com destaque do caminho do HEAD, minimapa

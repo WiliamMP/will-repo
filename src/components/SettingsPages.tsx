@@ -112,8 +112,9 @@ export const PAGES: Page[] = [
     sections: [
       { id: "theme", title: "Tema" },
       { id: "zoom", title: "Zoom" },
+      { id: "history", title: "Histórico" },
     ],
-    keywords: "tema escuro claro sistema cor zoom tamanho fonte texto neon",
+    keywords: "tema escuro claro sistema cor zoom tamanho fonte texto neon avatar foto autor minimapa",
     render: (ctx) => <AppearancePage {...ctx} />,
   },
   {
@@ -452,6 +453,16 @@ function AppearancePage({ theme, setTheme, goTo }: SettingsContext) {
           format={(n) => `${Math.round(n * 100)}%`}
           onChange={set("zoom")}
         />
+      </Section>
+
+      <Section id="history" title="Histórico">
+        <Row
+          label="Fotos dos autores"
+          description="Ao lado do nome, no histórico. Vem do GitHub ou do Gravatar (só o hash do email é enviado)."
+          htmlFor="show-avatars"
+        >
+          <Switch id="show-avatars" checked={s.showAvatars} onCheckedChange={set("showAvatars")} />
+        </Row>
         <Related
           icon={Keyboard}
           title="Atalhos"

@@ -5,18 +5,24 @@ import { openPath } from "@tauri-apps/plugin-opener";
 import { toast } from "sonner";
 import { getSettings } from "@/hooks/use-settings";
 
-export type RefKind = "head" | "branch" | "remote" | "tag";
+export type RefKind = "head" | "branch" | "remote" | "tag" | "stash";
 export type RefLabel = { name: string; kind: RefKind };
 
 export type Commit = {
   hash: string;
   parents: string[];
   author: string;
+  email: string;
   timestamp: number; // unix seconds
   refs: RefLabel[];
   subject: string;
   lane: number;
+  /** "stash@{0}" when the node is a stash */
+  stash: string | null;
 };
+
+/** Focus mode of the graph: only one branch, or some branches hidden */
+export type Focus = { solo: string | null; hidden: string[] };
 
 export type Refs = { head: string | null; branches: string[]; remotes: string[]; tags: string[] };
 
@@ -110,7 +116,7 @@ export const git = {
   githubCreatePr: (repo: string, title: string, body: string, base: string, draft: boolean) =>
     invoke<string>("github_create_pr", { repo, title, body, base, draft }),
   repoSummary: (repo: string, email: string | null) => invoke<RepoSummary>("repo_summary", { repo, email }),
-  log: (repo: string, limit: number) => invoke<Commit[]>("log", { repo, limit }),
+  log: (repo: string, limit: number, focus: Focus) => invoke<Commit[]>("log", { repo, limit, solo: focus.solo, hidden: focus.hidden }),
   search: (repo: string, query: string) => invoke<Commit[]>("search", { repo, query }),
   refs: (repo: string) => invoke<Refs>("refs", { repo }),
   status: (repo: string) => invoke<Status>("status", { repo }),

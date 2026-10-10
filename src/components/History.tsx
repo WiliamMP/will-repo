@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { ChevronsDown, CirclePlus, Copy, Loader2, Search, Tag, Undo2, X } from "lucide-react";
+import { Archive, ChevronsDown, CirclePlus, Copy, Focus as FocusIcon, Loader2, Search, Tag, Undo2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -11,9 +11,12 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { Input } from "@/components/ui/input";
+import { AuthorAvatar } from "@/components/AuthorAvatar";
 import { Graph, graphWidth } from "@/components/Graph";
+import { Minimap } from "@/components/Minimap";
+import { useSettings } from "@/hooks/use-settings";
 import { RefBadge } from "@/components/RefBadge";
-import { git, relativeDate, type Commit } from "@/lib/git";
+import { git, relativeDate, type Commit, type Focus } from "@/lib/git";
 import { cn } from "@/lib/utils";
 
 const ROW = 28; // h-7, must match Graph.tsx
@@ -32,9 +35,12 @@ type Props = {
   hasMore: boolean;
   onLoadMore: () => Promise<unknown>;
   actions: CommitActions;
+  focus: Focus;
+  onClearFocus: () => void;
 };
 
-export function History({ repo, commits, selected, onSelect, hasMore, onLoadMore, actions }: Props) {
+export function History({ repo, commits, selected, onSelect, hasMore, onLoadMore, actions, focus, onClearFocus }: Props) {
+  const { showAvatars } = useSettings();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<Commit[] | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -88,6 +94,15 @@ export function History({ repo, commits, selected, onSelect, hasMore, onLoadMore
             onKeyDown={(e) => e.key === "Escape" && setQuery("")}
           />
         </div>
+        {(focus.solo || focus.hidden.length > 0) && !searching && (
+          <span className="flex shrink-0 items-center gap-1.5 rounded-md border border-primary/50 bg-primary/10 py-0.5 pr-0.5 pl-2 text-xs text-primary shadow-[0_0_12px_-4px_var(--glow)]">
+            <FocusIcon className="size-3.5" />
+            {focus.solo ? `Só ${focus.solo}` : `${focus.hidden.length} escondida(s)`}
+            <Button variant="ghost" size="icon-xs" className="size-5 text-primary" aria-label="Mostrar tudo" title="Mostrar todas as branches" onClick={onClearFocus}>
+              <X />
+            </Button>
+          </span>
+        )}
         {searching && (
           <>
             <span className="shrink-0 text-xs text-muted-foreground">{results.length} resultado(s)</span>
@@ -104,7 +119,10 @@ export function History({ repo, commits, selected, onSelect, hasMore, onLoadMore
         <span>Data</span>
       </div>
 
-      <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto">
+      <div className="relative min-h-0 flex-1">
+      {!searching && <Minimap commits={commits} scrollRef={scrollRef} />}
+      {/* the minimap is the scrollbar here, so the native one is hidden */}
+      <div ref={scrollRef} className={cn("h-full overflow-auto", !searching && "[scrollbar-width:none]")}>
         {rows.length === 0 && (
           <p className="p-4 text-muted-foreground">{searching ? "Nada encontrado." : "Nenhum commit ainda."}</p>
         )}
@@ -128,7 +146,8 @@ export function History({ repo, commits, selected, onSelect, hasMore, onLoadMore
                     style={{ ...cols, transform: `translateY(${item.start}px)` }}
                     onClick={() => onSelect(c)}
                     className={cn(
-                      "absolute top-0 left-0 grid h-7 w-full cursor-pointer items-center gap-2 pr-3 hover:bg-muted/60",
+                      "absolute top-0 left-0 grid h-7 w-full cursor-pointer items-center gap-2 pr-5 hover:bg-muted/60",
+                    c.stash && "italic text-muted-foreground",
                       c.hash === selected && "bg-accent shadow-[inset_2px_0_0_var(--primary)] hover:bg-accent",
                     )}
                   >
@@ -141,11 +160,20 @@ export function History({ repo, commits, selected, onSelect, hasMore, onLoadMore
                         {c.subject}
                       </span>
                     </span>
-                    <span className="truncate text-xs text-muted-foreground">{c.author}</span>
+                    <span className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+                      {showAvatars && <AuthorAvatar name={c.author} email={c.email} />}
+                      <span className="truncate">{c.author}</span>
+                    </span>
                     <span className="truncate text-xs text-muted-foreground">{relativeDate(c.timestamp)}</span>
                   </div>
                 </ContextMenuTrigger>
                 <ContextMenuContent>
+                  {c.stash ? (
+                    <ContextMenuItem onSelect={() => onSelect(c)}>
+                      <Archive /> Ver {c.stash}
+                    </ContextMenuItem>
+                  ) : (
+                  <>
                   <ContextMenuItem onSelect={() => actions.cherryPick(c)}>
                     <CirclePlus /> Cherry-pick neste HEAD
                   </ContextMenuItem>
@@ -161,6 +189,8 @@ export function History({ repo, commits, selected, onSelect, hasMore, onLoadMore
                   >
                     <Copy /> Copiar hash
                   </ContextMenuItem>
+                  </>
+                  )}
                 </ContextMenuContent>
               </ContextMenu>
             );
@@ -173,6 +203,7 @@ export function History({ repo, commits, selected, onSelect, hasMore, onLoadMore
             </Button>
           </div>
         )}
+      </div>
       </div>
     </main>
   );

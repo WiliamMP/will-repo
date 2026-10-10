@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
-import { Archive, ArrowUpFromLine, Cloud, GitBranch, GitMerge, GitPullRequestArrow, LogIn, Search, Tag, Trash2 } from "lucide-react";
+import { Archive, ArrowUpFromLine, Cloud, Eye, EyeOff, Focus, GitBranch, GitMerge, GitPullRequestArrow, LogIn, Search, Tag, Trash2 } from "lucide-react";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -20,6 +20,9 @@ export type BranchActions = {
   remove: (name: string) => void;
   pushTag: (name: string) => void;
   deleteTag: (name: string) => void;
+  /** focus mode of the graph */
+  solo: (name: string) => void;
+  toggleHidden: (name: string) => void;
 };
 
 type Props = {
@@ -28,17 +31,43 @@ type Props = {
   selectedStash: string | null;
   onSelectStash: (name: string) => void;
   actions: BranchActions;
+  /** branches hidden from the graph (focus mode) */
+  hidden: string[];
 };
 
-export function Sidebar({ refs, stashes, selectedStash, onSelectStash, actions }: Props) {
+export function Sidebar({ refs, stashes, selectedStash, onSelectStash, actions, hidden }: Props) {
   const [filter, setFilter] = useState("");
   const match = (names: string[]) => names.filter((n) => n.toLowerCase().includes(filter.toLowerCase()));
   const head = refs.head ?? "HEAD";
 
   // Right-click menu of a branch (like a TPopupMenu attached to each item)
+  // Focus mode entries, also for the current branch
+  const focusItems = (name: string) => (
+    <>
+      <ContextMenuItem onSelect={() => actions.solo(name)}>
+        <Focus /> Isolar no grafo
+      </ContextMenuItem>
+      <ContextMenuItem onSelect={() => actions.toggleHidden(name)}>
+        {hidden.includes(name) ? (
+          <>
+            <Eye /> Mostrar no grafo
+          </>
+        ) : (
+          <>
+            <EyeOff /> Esconder do grafo
+          </>
+        )}
+      </ContextMenuItem>
+    </>
+  );
+
   const branchMenu = (name: string, remote: boolean) =>
-    name === refs.head ? null : (
+    name === refs.head ? (
+      focusItems(name)
+    ) : (
       <>
+        {focusItems(name)}
+        <ContextMenuSeparator />
         <ContextMenuItem onSelect={() => actions.checkout(name, remote)}>
           <LogIn /> Checkout {remote && "(cria branch local)"}
         </ContextMenuItem>
@@ -80,6 +109,7 @@ export function Sidebar({ refs, stashes, selectedStash, onSelectStash, actions }
             active={refs.head}
             onOpen={(n) => actions.checkout(n, false)}
             menu={(n) => branchMenu(n, false)}
+            hidden={hidden}
           />
           <Section
             title="Remotes"
@@ -87,6 +117,7 @@ export function Sidebar({ refs, stashes, selectedStash, onSelectStash, actions }
             items={match(refs.remotes)}
             onOpen={(n) => actions.checkout(n, true)}
             menu={(n) => branchMenu(n, true)}
+            hidden={hidden}
           />
           <Section
             title="Tags"
@@ -144,7 +175,7 @@ type SectionProps = {
   menu?: (name: string) => ReactNode;
 };
 
-function Section({ title, icon: Icon, items, active, onOpen, menu }: SectionProps) {
+function Section({ title, icon: Icon, items, active, onOpen, menu, hidden }: SectionProps & { hidden?: string[] }) {
   if (items.length === 0) return null;
   return (
     <div>
@@ -158,6 +189,7 @@ function Section({ title, icon: Icon, items, active, onOpen, menu }: SectionProp
           >
             <Icon className="size-3.5 shrink-0" />
             <span className="truncate">{name}</span>
+            {hidden?.includes(name) && <EyeOff className="ml-auto size-3 shrink-0 opacity-60" aria-label="Escondida do grafo" />}
           </div>
         );
         const items = menu?.(name);

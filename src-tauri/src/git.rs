@@ -112,27 +112,44 @@ pub fn open_repo(path: String) -> Res<RepoInfo> {
 }
 
 // %x1f / %x1e = the FS / RS separators from parse.rs
-const LOG_FORMAT: &str = "--format=%H%x1f%P%x1f%an%x1f%at%x1f%D%x1f%s%x1e";
+const LOG_FORMAT: &str = "--format=%H%x1f%P%x1f%an%x1f%ae%x1f%at%x1f%D%x1f%s%x1e";
+// same fields for stashes; %gd = "stash@{0}", %gs = its message
+const STASH_LOG_FORMAT: &str = "--format=%H%x1f%P%x1f%an%x1f%ae%x1f%at%x1f%gd%x1f%gs%x1e";
 
-/// Newest `limit` commits of all branches. "Load more" asks again with a bigger limit:
+/// Newest `limit` commits. "Load more" asks again with a bigger limit:
 /// lanes need the history from the top, so we don't page with --skip.
+/// Focus mode: `solo` shows only that branch; `hidden` branches leave the graph
+/// (their commits still show when another branch reaches them).
 // ponytail: re-reads everything on "load more", fine for tens of thousands of commits
 #[tauri::command(async)]
-pub fn log(repo: String, limit: usize) -> Res<Vec<Commit>> {
+pub fn log(repo: String, limit: usize, solo: Option<String>, hidden: Vec<String>) -> Res<Vec<Commit>> {
     let n = limit.to_string();
-    let out = git(
-        &repo,
-        &[
-            "log",
-            "--all",
-            "--date-order",
-            "--decorate=full",
-            "-n",
-            &n,
-            LOG_FORMAT,
-        ],
-    )?;
+    let mut args: Vec<String> = ["log", "--date-order", "--decorate=full", "-n", &n, LOG_FORMAT]
+        .map(String::from)
+        .to_vec();
+    match &solo {
+        Some(branch) => {
+            // a remote branch name like origin/x needs the full ref to be unambiguous
+            let is_local = git(&repo, &["rev-parse", "--verify", "--quiet", &format!("refs/heads/{branch}")]).is_ok();
+            args.push(if is_local { format!("refs/heads/{branch}") } else { format!("refs/remotes/{branch}") });
+            args.push("--".into());
+        }
+        None => {
+            for h in &hidden {
+                args.push(format!("--exclude=refs/heads/{h}"));
+                args.push(format!("--exclude=refs/remotes/{h}"));
+            }
+            // stashes are added below as single nodes, not as their internal commits
+            args.push("--exclude=refs/stash".into());
+            args.push("--all".into());
+        }
+    }
+    let out = git(&repo, &args.iter().map(String::as_str).collect::<Vec<_>>())?;
     let mut commits = parse::parse_log(&out);
+    if solo.is_none() {
+        let stashes = git(&repo, &["stash", "list", STASH_LOG_FORMAT]).unwrap_or_default();
+        parse::insert_stashes(&mut commits, parse::parse_stash_nodes(&stashes));
+    }
     parse::assign_lanes(&mut commits);
     Ok(commits)
 }
@@ -1047,7 +1064,7 @@ mod tests {
         git(&repo, &["config", "user.email", "t@t"]).unwrap();
 
         // empty repo: no commits, no crash
-        assert!(log(r(), 1000).unwrap().is_empty());
+        assert!(log(r(), 1000, None, vec![]).unwrap().is_empty());
 
         std::fs::write(dir.join("a.txt"), "one\n").unwrap();
         let st = status(r()).unwrap();
@@ -1074,7 +1091,7 @@ mod tests {
         )
         .unwrap();
 
-        let commits = log(r(), 1000).unwrap();
+        let commits = log(r(), 1000, None, vec![]).unwrap();
         let subjects: Vec<_> = commits.iter().map(|c| c.subject.as_str()).collect();
         assert_eq!(subjects, vec!["merge", "second", "first"]);
         assert_eq!(commits[0].parents.len(), 2);
@@ -1236,7 +1253,7 @@ mod tests {
         operation(r(), OpAction::Continue).unwrap();
 
         assert_eq!(repo_state(r()).unwrap().kind, None);
-        assert_eq!(log(r(), 10).unwrap()[0].parents.len(), 2);
+        assert_eq!(log(r(), 10, None, vec![]).unwrap()[0].parents.len(), 2);
 
         delete_branch(r(), "feature".into(), false).unwrap();
         let _ = std::fs::remove_dir_all(&dir);
@@ -1265,7 +1282,7 @@ mod tests {
         assert!(status(r()).unwrap().conflicted.is_empty());
         operation(r(), OpAction::Continue).unwrap();
 
-        let commits = log(r(), 10).unwrap();
+        let commits = log(r(), 10, None, vec![]).unwrap();
         let subjects: Vec<_> = commits.iter().map(|c| c.subject.as_str()).collect();
         assert_eq!(subjects, vec!["feature change", "main change", "base"]);
         assert_eq!(
@@ -1302,7 +1319,7 @@ mod tests {
 ").unwrap();
         stage(r(), vec!["g.txt".into()]).unwrap();
         commit(r(), "base com g".into(), true).unwrap();
-        assert_eq!(log(r(), 10).unwrap().len(), 1);
+        assert_eq!(log(r(), 10, None, vec![]).unwrap().len(), 1);
         assert!(status(r()).unwrap().staged.is_empty());
 
         // cherry-pick a commit from feature onto main, then revert it
@@ -1472,6 +1489,37 @@ mod tests {
         for mode in ["ff-only", "rebase", "merge"] {
             assert!(pull(r(), mode.into()).is_err());
         }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn focus_mode_and_stash_nodes() {
+        let (dir, repo) = temp_repo("focus");
+        let r = || repo.clone();
+        git(&repo, &["switch", "-q", "-c", "feature"]).unwrap();
+        std::fs::write(dir.join("g.txt"), "g\n").unwrap();
+        git(&repo, &["add", "."]).unwrap();
+        git(&repo, &["commit", "-qm", "on feature"]).unwrap();
+        git(&repo, &["switch", "-q", "main"]).unwrap();
+        std::fs::write(dir.join("f.txt"), "changed\n").unwrap();
+        stash_push(r(), "meu stash".into(), false).unwrap();
+
+        let all = log(r(), 100, None, vec![]).unwrap();
+        let subjects: Vec<_> = all.iter().map(|c| c.subject.as_str()).collect();
+        // the stash is one node (no "index on" commit), above its base
+        assert_eq!(subjects.len(), 3);
+        let stash = all.iter().find(|c| c.stash.is_some()).unwrap();
+        assert_eq!(stash.stash.as_deref(), Some("stash@{0}"));
+        assert!(stash.subject.ends_with("meu stash"));
+        assert_eq!(all[0].email, "t@t");
+
+        // hide feature: its commit leaves the graph
+        let hidden = log(r(), 100, None, vec!["feature".into()]).unwrap();
+        assert!(hidden.iter().all(|c| c.subject != "on feature"));
+        // solo feature: only its history, no stash
+        let solo = log(r(), 100, Some("feature".into()), vec![]).unwrap();
+        let subjects: Vec<_> = solo.iter().map(|c| c.subject.as_str()).collect();
+        assert_eq!(subjects, vec!["on feature", "base"]);
         let _ = std::fs::remove_dir_all(&dir);
     }
 

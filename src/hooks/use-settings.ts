@@ -4,6 +4,8 @@ import { useSyncExternalStore } from "react";
 export type Settings = {
   /** interface zoom: 0.9 .. 1.25 */
   zoom: number;
+  /** author photos in the history (GitHub / Gravatar) */
+  showAvatars: boolean;
   /** 0 = off */
   autoFetchMinutes: number;
   pullMode: "ff-only" | "rebase" | "merge";
@@ -18,6 +20,7 @@ export type Settings = {
 
 export const DEFAULTS: Settings = {
   zoom: 1,
+  showAvatars: true,
   autoFetchMinutes: 5,
   pullMode: "ff-only",
   diffContext: 3,
