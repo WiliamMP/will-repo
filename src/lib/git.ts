@@ -175,7 +175,12 @@ export const git = {
   pull: (repo: string) => invoke<void>("pull", { repo, mode: getSettings().pullMode }),
   push: (repo: string) => invoke<void>("push", { repo }),
   checkout: (repo: string, branch: string, remote: boolean) => invoke<void>("checkout", { repo, branch, remote }),
-  createBranch: (repo: string, name: string, checkout: boolean) => invoke<void>("create_branch", { repo, name, checkout }),
+  createBranch: (repo: string, name: string, checkout: boolean, from: string | null = null) =>
+    invoke<void>("create_branch", { repo, name, checkout, from }),
+  defaultBranch: (repo: string) => invoke<string>("default_branch", { repo }),
+  /** merge into base (--no-ff), optional tag, delete the branch */
+  finishBranch: (repo: string, name: string, base: string, tag: string | null) =>
+    invoke<void>("finish_branch", { repo, name, base, tag }),
   /** returns the commit the branch pointed to (for undo) */
   deleteBranch: (repo: string, name: string, force: boolean) => invoke<string>("delete_branch", { repo, name, force }),
   reflog: (repo: string, limit: number) => invoke<ReflogEntry[]>("reflog", { repo, limit }),

@@ -18,7 +18,11 @@ export type Settings = {
   /** command like "code"; "" = the file's default app */
   editor: string;
   terminal: "wt" | "powershell" | "pwsh" | "cmd" | "git-bash";
+  /** branch templates: prefix, branch it starts from and merges into ("" = main/master), tag on finish */
+  branchTemplates: BranchTemplate[];
 };
+
+export type BranchTemplate = { prefix: string; base: string; tag: boolean };
 
 export const DEFAULTS: Settings = {
   zoom: 1,
@@ -30,6 +34,12 @@ export const DEFAULTS: Settings = {
   ignoreWhitespace: false,
   editor: "",
   terminal: "wt",
+  branchTemplates: [
+    { prefix: "feature/", base: "", tag: false },
+    { prefix: "fix/", base: "", tag: false },
+    { prefix: "release/", base: "", tag: true },
+    { prefix: "hotfix/", base: "", tag: true },
+  ],
 };
 
 const KEY = "will-repo.settings";

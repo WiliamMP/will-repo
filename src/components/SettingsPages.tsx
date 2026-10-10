@@ -126,8 +126,9 @@ export const PAGES: Page[] = [
     sections: [
       { id: "sync", title: "Sincronização" },
       { id: "pull", title: "Pull" },
+      { id: "templates", title: "Modelos de branch" },
     ],
-    keywords: "fetch automático intervalo minutos pull rebase merge fast-forward remote",
+    keywords: "fetch automático intervalo minutos pull rebase merge fast-forward remote git-flow feature release hotfix prefixo",
     render: (ctx) => <GitPage {...ctx} />,
   },
   {
@@ -568,6 +569,40 @@ function GitPage({ goTo }: SettingsContext) {
               </button>
             );
           })}
+        </div>
+      </Section>
+
+      <Section
+        id="templates"
+        title="Modelos de branch"
+        description="Prefixos oferecidos ao criar uma branch. “Finalizar” (menu da branch) mescla na base com um commit de merge, cria a tag se marcado e exclui a branch."
+      >
+        <div className="overflow-hidden rounded-lg border">
+          <div className="grid grid-cols-[1fr_1fr_70px_32px] gap-2 border-b bg-muted/40 px-3 py-1.5 text-[11px] tracking-wider text-muted-foreground uppercase">
+            <span>Prefixo</span>
+            <span>Base</span>
+            <span>Tag</span>
+            <span />
+          </div>
+          {s.branchTemplates.map((t, i) => {
+            const change = (patch: Partial<typeof t>) =>
+              set("branchTemplates")(s.branchTemplates.map((x, j) => (j === i ? { ...x, ...patch } : x)));
+            return (
+              <div key={i} className="grid grid-cols-[1fr_1fr_70px_32px] items-center gap-2 border-b px-3 py-1.5 last:border-0">
+                <Input className="h-7 font-mono text-xs" value={t.prefix} onChange={(e) => change({ prefix: e.target.value.replace(/\s/g, "-") })} aria-label="Prefixo" />
+                <Input className="h-7 font-mono text-xs" placeholder="main/master" value={t.base} onChange={(e) => change({ base: e.target.value.trim() })} aria-label="Base" />
+                <Switch checked={t.tag} onCheckedChange={(v) => change({ tag: v })} aria-label="Criar tag ao finalizar" />
+                <Button size="icon-xs" variant="ghost" className="text-destructive" aria-label="Remover" onClick={() => set("branchTemplates")(s.branchTemplates.filter((_, j) => j !== i))}>
+                  <Trash2 />
+                </Button>
+              </div>
+            );
+          })}
+        </div>
+        <div className="mt-2">
+          <Button size="sm" variant="outline" onClick={() => set("branchTemplates")([...s.branchTemplates, { prefix: "", base: "", tag: false }])}>
+            <Plus /> Adicionar modelo
+          </Button>
         </div>
         <div className="mt-4">
           <Related

@@ -3,7 +3,9 @@ import { Badge } from "@/components/ui/badge";
 import type { RefLabel } from "@/lib/git";
 import { cn } from "@/lib/utils";
 
-export function RefBadge({ refInfo, lane }: { refInfo: RefLabel; lane: number }) {
+type Props = { refInfo: RefLabel; lane: number } & Omit<React.ComponentProps<"span">, "ref">;
+
+export function RefBadge({ refInfo, lane, ...rest }: Props) {
   const color =
     refInfo.kind === "tag"
       ? "var(--warning)"
@@ -12,6 +14,7 @@ export function RefBadge({ refInfo, lane }: { refInfo: RefLabel; lane: number })
         : `var(--lane-${(lane % 6) + 1})`;
   return (
     <Badge
+      {...rest}
       variant="outline"
       style={{ "--c": color } as React.CSSProperties}
       className={cn(

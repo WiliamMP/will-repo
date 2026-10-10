@@ -50,6 +50,8 @@ pub fn run() {
             git::push,
             git::checkout,
             git::create_branch,
+            git::default_branch,
+            git::finish_branch,
             git::stash_list,
             git::stash_push,
             git::stash_action,

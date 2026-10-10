@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
-import { Archive, ArrowUpFromLine, Cloud, Eye, EyeOff, Focus, GitBranch, GitMerge, GitPullRequestArrow, LogIn, Search, Tag, Trash2 } from "lucide-react";
+import { Archive, ArrowUpFromLine, Cloud, Eye, EyeOff, FlagTriangleRight, Focus, GitBranch, GitMerge, GitPullRequestArrow, LogIn, Search, Tag, Trash2 } from "lucide-react";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -11,6 +11,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import type { Refs, Stash } from "@/lib/git";
+import { branchDropProps, dragBranch } from "@/lib/dnd";
+import { useSettings } from "@/hooks/use-settings";
 import { cn } from "@/lib/utils";
 
 export type BranchActions = {
@@ -23,6 +25,10 @@ export type BranchActions = {
   /** focus mode of the graph */
   solo: (name: string) => void;
   toggleHidden: (name: string) => void;
+  /** branch templates: merge into its base, tag, delete */
+  finish: (name: string) => void;
+  /** a branch dropped onto another */
+  drop: (source: string, target: string, x: number, y: number) => void;
 };
 
 type Props = {
@@ -36,6 +42,7 @@ type Props = {
 };
 
 export function Sidebar({ refs, stashes, selectedStash, onSelectStash, actions, hidden }: Props) {
+  const { branchTemplates } = useSettings();
   const [filter, setFilter] = useState("");
   const match = (names: string[]) => names.filter((n) => n.toLowerCase().includes(filter.toLowerCase()));
   const head = refs.head ?? "HEAD";
@@ -61,9 +68,23 @@ export function Sidebar({ refs, stashes, selectedStash, onSelectStash, actions, 
     </>
   );
 
+  // Branch templates: "Finalizar feature/x" (also on the current branch, the usual case)
+  const finishItem = (name: string) =>
+    branchTemplates.some((t) => name.startsWith(t.prefix) && name !== t.prefix) && (
+      <>
+        <ContextMenuSeparator />
+        <ContextMenuItem onSelect={() => actions.finish(name)}>
+          <FlagTriangleRight /> Finalizar {name}
+        </ContextMenuItem>
+      </>
+    );
+
   const branchMenu = (name: string, remote: boolean) =>
     name === refs.head ? (
-      focusItems(name)
+      <>
+        {focusItems(name)}
+        {finishItem(name)}
+      </>
     ) : (
       <>
         {focusItems(name)}
@@ -78,6 +99,7 @@ export function Sidebar({ refs, stashes, selectedStash, onSelectStash, actions, 
         <ContextMenuItem onSelect={() => actions.rebase(name)}>
           <GitPullRequestArrow /> Rebase de {head} sobre {name}
         </ContextMenuItem>
+        {!remote && finishItem(name)}
         {!remote && (
           <>
             <ContextMenuSeparator />
@@ -110,6 +132,7 @@ export function Sidebar({ refs, stashes, selectedStash, onSelectStash, actions, 
             onOpen={(n) => actions.checkout(n, false)}
             menu={(n) => branchMenu(n, false)}
             hidden={hidden}
+            onDrop={actions.drop}
           />
           <Section
             title="Remotes"
@@ -118,6 +141,7 @@ export function Sidebar({ refs, stashes, selectedStash, onSelectStash, actions, 
             onOpen={(n) => actions.checkout(n, true)}
             menu={(n) => branchMenu(n, true)}
             hidden={hidden}
+            draggableOnly
           />
           <Section
             title="Tags"
@@ -175,17 +199,30 @@ type SectionProps = {
   menu?: (name: string) => ReactNode;
 };
 
-function Section({ title, icon: Icon, items, active, onOpen, menu, hidden }: SectionProps & { hidden?: string[] }) {
+type DropProps = {
+  hidden?: string[];
+  /** rows accept branches dropped on them */
+  onDrop?: (source: string, target: string, x: number, y: number) => void;
+  /** rows can be dragged but not dropped on (remote branches) */
+  draggableOnly?: boolean;
+};
+
+function Section({ title, icon: Icon, items, active, onOpen, menu, hidden, onDrop, draggableOnly }: SectionProps & DropProps) {
+  const [over, setOver] = useState<string | null>(null);
   if (items.length === 0) return null;
+  const branchRows = !!onDrop || !!draggableOnly;
   return (
     <div>
       <SectionTitle>{title}</SectionTitle>
       {items.map((name) => {
         const row = (
           <div
+            draggable={branchRows}
+            onDragStart={branchRows ? (e) => dragBranch(e, name) : undefined}
+            {...(onDrop ? branchDropProps(name, onDrop, (o) => setOver(o ? name : null)) : {})}
             onDoubleClick={() => name !== active && onOpen?.(name)}
             title={onOpen && name !== active ? "Duplo clique: checkout · Botão direito: mais ações" : undefined}
-            className={cn(itemClass, name === active && activeClass)}
+            className={cn(itemClass, name === active && activeClass, over === name && "bg-primary/20 ring-1 ring-primary")}
           >
             <Icon className="size-3.5 shrink-0" />
             <span className="truncate">{name}</span>

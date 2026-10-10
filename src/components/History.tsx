@@ -17,6 +17,7 @@ import { Minimap } from "@/components/Minimap";
 import { useSettings } from "@/hooks/use-settings";
 import { RefBadge } from "@/components/RefBadge";
 import { git, relativeDate, type Commit, type Focus } from "@/lib/git";
+import { branchDropProps, dragBranch } from "@/lib/dnd";
 import { cn } from "@/lib/utils";
 
 const ROW = 28; // h-7, must match Graph.tsx
@@ -38,9 +39,12 @@ type Props = {
   actions: CommitActions;
   focus: Focus;
   onClearFocus: () => void;
+  /** a branch was dropped onto another (drag and drop in the graph) */
+  onBranchDrop: (source: string, target: string, x: number, y: number) => void;
 };
 
-export function History({ repo, commits, selected, onSelect, hasMore, onLoadMore, actions, focus, onClearFocus }: Props) {
+export function History({ repo, commits, selected, onSelect, hasMore, onLoadMore, actions, focus, onClearFocus, onBranchDrop }: Props) {
+  const [dropRow, setDropRow] = useState<string | null>(null);
   const { showAvatars } = useSettings();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<Commit[] | null>(null);
@@ -144,18 +148,32 @@ export function History({ repo, commits, selected, onSelect, hasMore, onLoadMore
               <ContextMenu key={c.hash}>
                 <ContextMenuTrigger asChild>
                   <div
+                    {...(() => {
+                      // a row with a local branch accepts branches dropped on it
+                      const target = c.refs.find((r) => r.kind === "head" || r.kind === "branch")?.name;
+                      return target ? branchDropProps(target, onBranchDrop, (over) => setDropRow(over ? c.hash : null)) : {};
+                    })()}
                     style={{ ...cols, transform: `translateY(${item.start}px)` }}
                     onClick={() => onSelect(c)}
                     className={cn(
                       "absolute top-0 left-0 grid h-7 w-full cursor-pointer items-center gap-2 pr-5 hover:bg-muted/60",
                     c.stash && "italic text-muted-foreground",
+                    dropRow === c.hash && "bg-primary/20 ring-1 ring-primary ring-inset",
                       c.hash === selected && "bg-accent shadow-[inset_2px_0_0_var(--primary)] hover:bg-accent",
                     )}
                   >
                     <span />
                     <span className="flex min-w-0 items-center gap-1">
                       {c.refs.map((r) => (
-                        <RefBadge key={r.kind + r.name} refInfo={r} lane={c.lane} />
+                        <RefBadge
+                        key={r.kind + r.name}
+                        refInfo={r}
+                        lane={c.lane}
+                        // local and remote branches can be dragged onto another branch
+                        draggable={r.kind === "head" || r.kind === "branch" || r.kind === "remote"}
+                        onDragStart={(e) => dragBranch(e, r.name)}
+                        className={r.kind !== "tag" && r.kind !== "stash" ? "cursor-grab active:cursor-grabbing" : undefined}
+                      />
                       ))}
                       <span className="truncate" title={c.subject}>
                         {c.subject}

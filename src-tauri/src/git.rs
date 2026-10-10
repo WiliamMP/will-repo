@@ -394,13 +394,40 @@ pub fn checkout(repo: String, branch: String, remote: bool) -> Res<()> {
     }
 }
 
+/// `from`: start point (a branch or commit); None = the current HEAD
 #[tauri::command(async)]
-pub fn create_branch(repo: String, name: String, checkout: bool) -> Res<()> {
-    if checkout {
-        git(&repo, &["switch", "-c", &name]).map(drop)
-    } else {
-        git(&repo, &["branch", &name]).map(drop)
+pub fn create_branch(repo: String, name: String, checkout: bool, from: Option<String>) -> Res<()> {
+    let from = from.filter(|f| !f.trim().is_empty());
+    let mut args = if checkout { vec!["switch", "-c", &name] } else { vec!["branch", &name] };
+    if let Some(f) = &from {
+        // a remote branch as start point (origin/main) should not become the upstream
+        args.extend(["--no-track", f.as_str()]);
     }
+    git(&repo, &args).map(drop)
+}
+
+/// The repository's main branch: main, master or develop, whichever exists
+#[tauri::command(async)]
+pub fn default_branch(repo: String) -> Res<String> {
+    for b in ["main", "master", "develop"] {
+        if git(&repo, &["rev-parse", "--verify", "--quiet", &format!("refs/heads/{b}")]).is_ok() {
+            return Ok(b.into());
+        }
+    }
+    Ok(git(&repo, &["rev-parse", "--abbrev-ref", "HEAD"])?.trim().to_string())
+}
+
+/// Branch templates: finishing feature/x merges it into `base` (always with a merge
+/// commit, so the feature stays visible in the graph), optionally tags, then deletes it.
+/// A merge conflict stops here, with the merge in progress for the user to resolve.
+#[tauri::command(async)]
+pub fn finish_branch(repo: String, name: String, base: String, tag: Option<String>) -> Res<()> {
+    git(&repo, &["switch", &base])?;
+    git(&repo, &["merge", "--no-ff", "--no-edit", &name])?;
+    if let Some(t) = tag.filter(|t| !t.trim().is_empty()) {
+        git(&repo, &["tag", "-a", t.trim(), "-m", &format!("Release {}", t.trim())])?;
+    }
+    git(&repo, &["branch", "-d", &name]).map(drop)
 }
 
 // ---------- Time machine (reflog) and undo ----------
@@ -1245,7 +1272,7 @@ mod tests {
         stage(r(), vec!["a.txt".into()]).unwrap();
         commit(r(), "first".into(), false).unwrap();
 
-        create_branch(r(), "feature/x".into(), true).unwrap();
+        create_branch(r(), "feature/x".into(), true, None).unwrap();
         std::fs::write(dir.join("a.txt"), "one\ntwo\n").unwrap();
         let d = working_diff(r(), "a.txt".into(), false, false, 3).unwrap();
         assert!(d
@@ -1758,7 +1785,7 @@ mod tests {
         let second = head();
 
         // undo a checkout: back to the branch
-        create_branch(r(), "feature".into(), true).unwrap();
+        create_branch(r(), "feature".into(), true, None).unwrap();
         assert_eq!(undo_preview(r()).unwrap().description, "Voltar para a branch main");
         undo(r()).unwrap();
         assert_eq!(refs(r()).unwrap().head.as_deref(), Some("main"));
@@ -1776,6 +1803,34 @@ mod tests {
         assert!(refs(r()).unwrap().branches.contains(&"resgate".to_string()));
         restore(r(), base.clone(), RestoreAction::Reset, None).unwrap();
         assert_eq!(head(), base);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn branch_templates_start_and_finish() {
+        let (dir, repo) = temp_repo("flow");
+        let r = || repo.clone();
+        assert_eq!(default_branch(r()).unwrap(), "main");
+        git(&repo, &["switch", "-q", "-c", "other"]).unwrap();
+        std::fs::write(dir.join("o.txt"), "o\n").unwrap();
+        git(&repo, &["add", "."]).unwrap();
+        git(&repo, &["commit", "-qm", "on other"]).unwrap();
+
+        // start from main even while on another branch
+        create_branch(r(), "feature/login".into(), true, Some("main".into())).unwrap();
+        assert!(!dir.join("o.txt").exists());
+        std::fs::write(dir.join("login.txt"), "l\n").unwrap();
+        git(&repo, &["add", "."]).unwrap();
+        git(&repo, &["commit", "-qm", "login"]).unwrap();
+
+        finish_branch(r(), "feature/login".into(), "main".into(), Some("v1.0".into())).unwrap();
+        let rf = refs(r()).unwrap();
+        assert_eq!(rf.head.as_deref(), Some("main"));
+        assert!(!rf.branches.contains(&"feature/login".to_string()));
+        assert_eq!(rf.tags, vec!["v1.0"]);
+        let top = &log(r(), 5, None, vec![]).unwrap()[0];
+        assert_eq!(top.parents.len(), 2); // --no-ff merge commit
+        assert!(dir.join("login.txt").exists());
         let _ = std::fs::remove_dir_all(&dir);
     }
 

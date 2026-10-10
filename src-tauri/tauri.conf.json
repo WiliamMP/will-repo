@@ -19,7 +19,8 @@
         "minWidth": 900,
         "minHeight": 560,
         "label": "main",
-        "visible": false
+        "visible": false,
+        "dragDropEnabled": false
       },
       {
         "label": "splashscreen",
