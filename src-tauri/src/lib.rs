@@ -48,6 +48,7 @@ pub fn run() {
             git::discard_list,
             git::restore_discard,
             git::commit,
+            git::suggest_commit_message,
             git::commit_message,
             git::pick,
             git::create_tag,

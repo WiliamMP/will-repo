@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, Loader2, Sparkles } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -24,11 +25,25 @@ type Props = {
   /** recent commit subjects, newest first */
   recent: string[];
   disabled?: boolean;
+  /** asks Claude for a message for the staged changes; undefined = nothing staged */
+  onSuggest?: () => Promise<string>;
 };
 
 // Row above the commit box: type chips, recent messages and the title length
-export function CommitAssist({ message, onChange, recent, disabled }: Props) {
+export function CommitAssist({ message, onChange, recent, disabled, onSuggest }: Props) {
   const [showRecent, setShowRecent] = useState(false);
+  const [thinking, setThinking] = useState(false);
+  const suggest = async () => {
+    if (!onSuggest) return;
+    setThinking(true);
+    try {
+      onChange(await onSuggest());
+    } catch (e) {
+      toast.error(String(e));
+    } finally {
+      setThinking(false);
+    }
+  };
   const type = message.match(PREFIX)?.[1];
   const title = message.split("\n")[0].length;
 
@@ -47,6 +62,16 @@ export function CommitAssist({ message, onChange, recent, disabled }: Props) {
             {t}
           </Button>
         ))}
+        <Button
+          variant="ghost"
+          size="xs"
+          className="h-5 px-1.5 text-[11px] text-primary"
+          disabled={disabled || !onSuggest || thinking}
+          title={onSuggest ? "Escrever a mensagem a partir das alterações preparadas, com Claude" : "Prepare (stage) alterações para sugerir uma mensagem"}
+          onClick={suggest}
+        >
+          {thinking ? <Loader2 className="animate-spin" /> : <Sparkles />} {thinking ? "Pensando..." : "Sugerir"}
+        </Button>
         {recent.length > 0 && (
           <Button
             variant="ghost"

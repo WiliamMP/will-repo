@@ -255,7 +255,13 @@ export function WorkingTree({ repo, status, state, headPushed, recent, onFileHis
       )}
 
       <div className="flex flex-col gap-2 border-t p-3">
-        <CommitAssist message={message} onChange={setMessage} recent={recent} disabled={state.kind === "rebase"} />
+        <CommitAssist
+          message={message}
+          onChange={setMessage}
+          recent={recent}
+          disabled={state.kind === "rebase"}
+          onSuggest={status.staged.length ? () => git.suggestCommitMessage(repo) : undefined}
+        />
         <div className="relative overflow-hidden rounded-lg">
           <Textarea
             placeholder={state.kind === "rebase" ? "Rebase em andamento: use Continuar no aviso acima" : "Mensagem do commit... (Ctrl+Enter)"}

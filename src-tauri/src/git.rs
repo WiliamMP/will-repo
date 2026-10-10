@@ -1057,6 +1057,81 @@ pub fn repo_summary(repo: String, email: Option<String>) -> Res<RepoSummary> {
     })
 }
 
+// ---------- Commit message suggested by AI (Claude Code CLI) ----------
+
+/// Biggest diff sent to the model; longer ones are cut (the summary still works)
+const MAX_DIFF: usize = 40_000;
+
+/// Cuts at a char boundary so a multi-byte letter is never split
+fn cut(text: &str, max: usize) -> (&str, bool) {
+    if text.len() <= max {
+        return (text, false);
+    }
+    let mut end = max;
+    while !text.is_char_boundary(end) {
+        end -= 1;
+    }
+    (&text[..end], true)
+}
+
+fn commit_prompt(diff: &str, recent: &str) -> String {
+    let (diff, was_cut) = cut(diff, MAX_DIFF);
+    format!(
+        "Escreva a mensagem de commit para o diff abaixo.\n\
+         - Português do Brasil, padrão Conventional Commits (feat, fix, docs, refactor, style, test, perf, chore).\n\
+         - Título com até 72 caracteres. Se ajudar, uma linha em branco e um corpo curto em tópicos.\n\
+         - Responda SOMENTE com a mensagem: sem explicações, sem aspas, sem cercas de código.\n\
+         {}\nMensagens recentes do repositório (siga o estilo):\n{}\n\nDiff preparado:\n{}",
+        if was_cut { "- O diff foi cortado por ser grande; resuma o que der para ver.\n" } else { "" },
+        recent.trim(),
+        diff
+    )
+}
+
+/// What the model answered, without code fences or quotes around it
+fn clean_message(out: &str) -> String {
+    let t = out.trim();
+    let t = t.strip_prefix("```").map(|r| r.split_once('\n').map_or(r, |(_, rest)| rest)).unwrap_or(t);
+    let t = t.strip_suffix("```").unwrap_or(t).trim();
+    t.trim_matches('"').trim().to_string()
+}
+
+/// Suggests a message for the staged changes using the `claude` CLI (Claude Code),
+/// with the user's own login: no API key to configure. Haiku: fast and cheap.
+#[tauri::command(async)]
+pub fn suggest_commit_message(repo: String) -> Res<String> {
+    let diff = git(&repo, &["diff", "--cached", "--no-color", "-U2"])?;
+    if diff.trim().is_empty() {
+        return Err("Prepare (stage) alguma alteração primeiro".into());
+    }
+    let recent = git(&repo, &["log", "-8", "--format=%s"]).unwrap_or_default();
+
+    let mut cmd = Command::new("claude");
+    cmd.args(["-p", "--model", "haiku", "--tools", ""])
+        // a neutral folder: no CLAUDE.md of some project changes the answer
+        .current_dir(std::env::temp_dir())
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x0800_0000);
+    }
+    let mut child = cmd.spawn().map_err(|e| match e.kind() {
+        std::io::ErrorKind::NotFound => "Claude Code não encontrado. Instale (claude.com/code) e entre com `claude`.".to_string(),
+        _ => e.to_string(),
+    })?;
+    child.stdin.take().unwrap().write_all(commit_prompt(&diff, &recent).as_bytes()).map_err(|e| e.to_string())?;
+    let out = child.wait_with_output().map_err(|e| e.to_string())?;
+    let text = String::from_utf8_lossy(&out.stdout);
+    if !out.status.success() || text.trim().is_empty() {
+        let err = String::from_utf8_lossy(&out.stderr);
+        return Err(format!("Claude: {}", if err.trim().is_empty() { text.trim() } else { err.trim() }));
+    }
+    Ok(clean_message(&text))
+}
+
 // ---------- Settings: identity, editor, terminal ----------
 
 /// Changes the global `user.name` / `user.email`
@@ -2042,6 +2117,31 @@ mod tests {
         // cloning again into the same folder is refused before running git
         assert!(clone_repo(repo, dest.to_string_lossy().into_owned()).unwrap_err().contains("já existe"));
         let _ = std::fs::remove_dir_all(&dest);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn commit_prompt_and_cleanup() {
+        let p = commit_prompt("diff --git a b", "feat: x\nfix: y");
+        assert!(p.contains("Conventional Commits") && p.contains("fix: y") && p.ends_with("diff --git a b"));
+        // a huge diff is cut on a char boundary
+        let big = "ç".repeat(MAX_DIFF);
+        let (part, was_cut) = cut(&big, MAX_DIFF);
+        assert!(was_cut && part.len() <= MAX_DIFF);
+        assert_eq!(clean_message("```\nfeat: a\n\n- b\n```"), "feat: a\n\n- b");
+        assert_eq!(clean_message("\"fix: c\"\n"), "fix: c");
+    }
+
+    /// Real call to Claude Code (uses the user's plan). Run with: cargo test -- --ignored
+    #[test]
+    #[ignore]
+    fn live_commit_message() {
+        let (dir, repo) = temp_repo("ai");
+        std::fs::write(dir.join("f.txt"), "base\nnova linha\n").unwrap();
+        stage(repo.clone(), vec!["f.txt".into()]).unwrap();
+        let msg = suggest_commit_message(repo).unwrap();
+        println!("{msg}");
+        assert!(msg.contains(':'));
         let _ = std::fs::remove_dir_all(&dir);
     }
 

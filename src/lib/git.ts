@@ -169,6 +169,8 @@ export const git = {
   discardList: (repo: string) => invoke<Discard[]>("discard_list", { repo }),
   restoreDiscard: (repo: string, hash: string) => invoke<void>("restore_discard", { repo, hash }),
   commit: (repo: string, message: string, amend: boolean) => invoke<void>("commit", { repo, message, amend }),
+  /** message for the staged changes, written by Claude (Claude Code CLI) */
+  suggestCommitMessage: (repo: string) => invoke<string>("suggest_commit_message", { repo }),
   headMessage: (repo: string) => invoke<string>("commit_message", { repo, rev: "HEAD" }),
   commitMessage: (repo: string, hash: string) => invoke<string>("commit_message", { repo, rev: hash }),
   /** "https://github.com/owner/name", or null when origin isn't on GitHub */

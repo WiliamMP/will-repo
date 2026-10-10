@@ -17,7 +17,6 @@ Lista de próximas funcionalidades do will-repo. Tamanho estimado entre parênte
 ## Distribuição
 
 - [ ] **Auto-update** via GitHub Releases. (médio)
-- [ ] **CI no GitHub Actions** rodando `cargo test`, typecheck e build. (médio)
 
 ## Design system
 
@@ -40,7 +39,6 @@ Recursos inspirados no Sourcetree, no GitKraken e no Fork, repensados para o est
 
 ### Commits
 
-- [ ] **Mensagem de commit sugerida por IA** [GitKraken]: gerar a mensagem a partir do diff preparado, com Claude. (médio)
 - [ ] **Assinatura GPG/SSH** [Fork]: assinar commits e mostrar o selo "verificado" no histórico. (médio)
 
 ### Fluxos e estrutura
@@ -76,3 +74,4 @@ Recursos inspirados no Sourcetree, no GitKraken e no Fork, repensados para o est
 - [x] Submódulos (estado, baixar/atualizar, abrir em nova aba), worktrees (criar, abrir em aba, remover) e Git LFS (padrões e arquivos)
 - [x] Terminal integrado (Ctrl+`): shell real em PTY com xterm.js, várias abas, tema Neon
 - [x] Clonar repositório (lista dos seus repos do GitHub ou URL) e grupos de projetos no dashboard com "Fetch em todos"
+- [x] CI no GitHub Actions (typecheck, build, cargo test no Windows); mensagem de commit sugerida pelo Claude (Claude Code CLI, sem chave de API)
