@@ -34,7 +34,7 @@ import { Avatar, Github, GithubLogin, useGithub } from "@/components/Dashboard";
 import { Related, Row, Section, StopSlider, type Page } from "@/components/Settings";
 import { DEFAULTS, updateSettings, useSettings, type Settings } from "@/hooks/use-settings";
 import type { ThemeMode } from "@/hooks/use-theme";
-import { git, type Identity } from "@/lib/git";
+import { git, type Identity, type Signing } from "@/lib/git";
 import { cn } from "@/lib/utils";
 
 export type PageId = "account" | "identity" | "appearance" | "git" | "diff" | "integrations" | "shortcuts" | "about";
@@ -102,8 +102,9 @@ export const PAGES: Page[] = [
     sections: [
       { id: "global", title: "Identidade global" },
       { id: "folders", title: "Por pasta" },
+      { id: "signing", title: "Assinatura" },
     ],
-    keywords: "nome email autor git config trabalho pessoal perfil includeif",
+    keywords: "nome email autor git config trabalho pessoal perfil includeif assinatura gpg ssh verificado",
     render: () => <IdentityPage />,
   },
   {
@@ -404,7 +405,83 @@ function IdentityPage() {
           </div>
         )}
       </Section>
+
+      <SigningSection />
     </>
+  );
+}
+
+/** Sign every commit with an SSH key (simplest) or GPG; history shows "Verificado" */
+function SigningSection() {
+  const [sig, setSig] = useState<Signing | null>(null);
+  const [keys, setKeys] = useState<string[]>([]);
+  useEffect(() => {
+    // nothing configured yet: offer SSH, the simplest (git's own default would be GPG)
+    git.signing(".").then((v) => setSig(!v.enabled && !v.key ? { ...v, format: "ssh" } : v), (e) => toast.error(String(e)));
+    git.sshKeys().then(setKeys, () => {});
+  }, []);
+  if (!sig) return null;
+
+  const save = async () => {
+    try {
+      await git.setSigning(sig);
+      toast.success(sig.enabled ? "Commits serão assinados" : "Assinatura desligada");
+    } catch (e) {
+      toast.error(String(e));
+    }
+  };
+
+  return (
+    <Section
+      id="signing"
+      title="Assinatura"
+      description="Assina cada commit com a sua chave. No GitHub e no histórico do app eles aparecem como verificados (no GitHub, cadastre a chave como “Signing key”)."
+    >
+      <Row label="Assinar commits e tags" htmlFor="sign-on">
+        <Switch id="sign-on" checked={sig.enabled} onCheckedChange={(enabled) => setSig({ ...sig, enabled })} />
+      </Row>
+      {sig.enabled && (
+        <>
+          <Row label="Tipo de chave">
+            <Select value={sig.format} onValueChange={(f) => setSig({ ...sig, format: f as Signing["format"], key: "" })}>
+              <SelectTrigger className="w-40">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ssh">SSH</SelectItem>
+                <SelectItem value="openpgp">GPG</SelectItem>
+              </SelectContent>
+            </Select>
+          </Row>
+          <Row
+            label={sig.format === "ssh" ? "Chave pública" : "Id da chave GPG"}
+            description={sig.format === "ssh" ? (keys.length ? "Arquivos .pub em ~/.ssh." : "Nenhuma chave em ~/.ssh. Crie com: ssh-keygen -t ed25519") : "Veja com: gpg --list-secret-keys --keyid-format=long"}
+          >
+            {sig.format === "ssh" && keys.length ? (
+              <Select value={sig.key} onValueChange={(key) => setSig({ ...sig, key })}>
+                <SelectTrigger className="w-64">
+                  <SelectValue placeholder="Escolha a chave" />
+                </SelectTrigger>
+                <SelectContent>
+                  {keys.map((k) => (
+                    <SelectItem key={k} value={k}>
+                      {k.split("/").pop()}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <Input className="w-64 font-mono text-xs" value={sig.key} onChange={(e) => setSig({ ...sig, key: e.target.value })} />
+            )}
+          </Row>
+        </>
+      )}
+      <div className="mt-2 flex justify-end">
+        <Button size="sm" disabled={sig.enabled && !sig.key.trim()} onClick={save}>
+          <Check /> Salvar
+        </Button>
+      </div>
+    </Section>
   );
 }
 

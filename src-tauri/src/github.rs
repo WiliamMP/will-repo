@@ -77,8 +77,8 @@ pub async fn github_device_start() -> Res<DeviceCode> {
     client()?
         .post("https://github.com/login/device/code")
         .header("Accept", "application/json")
-        // repo: list and create pull requests, private repos included
-        .form(&[("client_id", CLIENT_ID), ("scope", "read:user repo")])
+        // repo: list and create pull requests, private repos included; gist: share a diff
+        .form(&[("client_id", CLIENT_ID), ("scope", "read:user repo gist")])
         .send()
         .await
         .map_err(net)?
@@ -246,6 +246,24 @@ fn parse_repos(body: &Value) -> Res<Vec<GithubRepo>> {
         .collect())
 }
 
+// ---------- Share a diff as a secret Gist ----------
+
+fn gist_body(description: &str, file: &str, content: &str) -> Value {
+    // secret = not listed or searchable, but anyone with the link can open it
+    json!({ "description": description, "public": false, "files": { file: { "content": content } } })
+}
+
+/// Creates a secret Gist with `content` and returns its URL
+#[tauri::command]
+pub async fn github_create_gist(description: String, file: String, content: String) -> Res<String> {
+    let req = client()?
+        .post("https://api.github.com/gists")
+        .header("Accept", "application/vnd.github+json")
+        .json(&gist_body(&description, &file, &content));
+    let (resp, _) = send(req).await?;
+    created_url(&resp)
+}
+
 // ---------- Pull requests ----------
 
 /// (owner, name) from a GitHub remote URL: https://github.com/o/r.git, git@github.com:o/r.git, ssh://...
@@ -399,6 +417,13 @@ mod tests {
         ] } } } });
         let r = parse_repos(&body).unwrap();
         assert_eq!((r[0].name_with_owner.as_str(), r[0].description.as_deref(), r[0].private), ("will/app", None, true));
+    }
+
+    #[test]
+    fn gist_is_secret() {
+        let b = gist_body("alterações", "x.patch", "diff");
+        assert_eq!(b["public"], false);
+        assert_eq!(b["files"]["x.patch"]["content"], "diff");
     }
 
     #[test]

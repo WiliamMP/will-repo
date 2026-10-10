@@ -14,6 +14,7 @@ import { ConflictView, sideNames } from "@/components/ConflictView";
 import { DiffView } from "@/components/DiffView";
 import { ImageDiff, isImage } from "@/components/ImageDiff";
 import { DiscardsDialog } from "@/components/DiscardsDialog";
+import { ShareDialog } from "@/components/ShareDialog";
 import { FileList } from "@/components/FileList";
 import { git, openInEditor, type DiffLine, type FileChange, type HunkAction, type RepoState, type Status } from "@/lib/git";
 import { cn } from "@/lib/utils";
@@ -187,6 +188,7 @@ export function WorkingTree({ repo, status, state, headPushed, recent, onFileHis
           </div>
         )}
         <ListHeader title={`Não preparados (${status.unstaged.length})`}>
+          <ShareDialog repo={repo} name={repo.split(/[\/]/).filter(Boolean).pop() ?? "alteracoes"} />
           <DiscardsDialog repo={repo} onRestore={restore} />
           {status.unstaged.length > 0 && (
             <>

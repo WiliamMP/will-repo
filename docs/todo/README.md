@@ -39,7 +39,6 @@ Recursos inspirados no Sourcetree, no GitKraken e no Fork, repensados para o est
 
 ### Commits
 
-- [ ] **Assinatura GPG/SSH** [Fork]: assinar commits e mostrar o selo "verificado" no histórico. (médio)
 
 ### Fluxos e estrutura
 
@@ -47,7 +46,6 @@ Recursos inspirados no Sourcetree, no GitKraken e no Fork, repensados para o est
 ### Dashboard e GitHub
 
 - [ ] **Central de pendências** [Launchpad do GitKraken + notificações do Fork]: no dashboard, PRs aguardando sua revisão, seus PRs abertos com status do CI e notificações do GitHub, de todos os projetos. (grande)
-- [ ] **Compartilhar um diff** [Cloud Patches do GitKraken]: enviar alterações ainda não commitadas como Gist privado, para mostrar a alguém. (médio)
 
 ## Já feito
 
@@ -75,3 +73,4 @@ Recursos inspirados no Sourcetree, no GitKraken e no Fork, repensados para o est
 - [x] Terminal integrado (Ctrl+`): shell real em PTY com xterm.js, várias abas, tema Neon
 - [x] Clonar repositório (lista dos seus repos do GitHub ou URL) e grupos de projetos no dashboard com "Fetch em todos"
 - [x] CI no GitHub Actions (typecheck, build, cargo test no Windows); mensagem de commit sugerida pelo Claude (Claude Code CLI, sem chave de API)
+- [x] Assinatura de commits (SSH ou GPG) com selo "Verificado"; compartilhar alterações como Gist secreto

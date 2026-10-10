@@ -88,6 +88,10 @@ export type PullRequest = {
 export type PullRequests = { defaultBranch: string; items: PullRequest[] };
 export type DeviceCode = { deviceCode: string; userCode: string; verificationUri: string; interval: number };
 
+export type Signing = { enabled: boolean; format: "ssh" | "openpgp"; key: string };
+/** status = git's %G?: G good, U good (unknown trust), X/Y expired, R revoked, B bad, E can't check, N none */
+export type SignatureInfo = { status: string; signer: string };
+
 export type GithubRepo = { nameWithOwner: string; description: string | null; url: string; private: boolean; updatedAt: string };
 
 export type Submodule = { path: string; absPath: string; hash: string; state: "ok" | "uninitialized" | "modified" | "conflict" };
@@ -120,10 +124,19 @@ export const git = {
   /** dest = the new folder (must not exist) */
   cloneRepo: (url: string, dest: string) => invoke<RepoInfo>("clone_repo", { url, dest }),
   githubRepos: () => invoke<GithubRepo[]>("github_repos"),
+  /** every uncommitted change (new files included) as one patch */
+  workingPatch: (repo: string) => invoke<string>("working_patch", { repo }),
+  /** secret Gist; returns its URL */
+  createGist: (description: string, file: string, content: string) =>
+    invoke<string>("github_create_gist", { description, file, content }),
   /** "git version 2.x"; fails when git is not installed */
   version: () => invoke<string>("git_version"),
   userInfo: () => invoke<UserInfo>("user_info"),
   setUserInfo: (name: string, email: string) => invoke<void>("set_user_info", { name, email }),
+  signing: (repo: string) => invoke<Signing>("signing", { repo }),
+  setSigning: (settings: Signing) => invoke<void>("set_signing", { settings }),
+  sshKeys: () => invoke<string[]>("ssh_keys"),
+  commitSignature: (repo: string, hash: string) => invoke<SignatureInfo>("commit_signature", { repo, hash }),
   identities: () => invoke<Identity[]>("identities"),
   setIdentities: (list: Identity[]) => invoke<void>("set_identities", { list }),
   /** `path` relative to the repo ("" = the repo folder) */

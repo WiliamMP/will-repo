@@ -1057,6 +1057,119 @@ pub fn repo_summary(repo: String, email: Option<String>) -> Res<RepoSummary> {
     })
 }
 
+// ---------- Share uncommitted changes (patch for a Gist) ----------
+
+/// Every uncommitted change as one patch: staged + unstaged (vs HEAD) and new files.
+/// Applies on the same commit with `git apply`.
+#[tauri::command(async)]
+pub fn working_patch(repo: String) -> Res<String> {
+    let has_head = git(&repo, &["rev-parse", "--verify", "--quiet", "HEAD"]).is_ok();
+    let mut patch = if has_head { git(&repo, &["diff", "HEAD", "--no-color"])? } else { String::new() };
+    let untracked = git(&repo, &["ls-files", "--others", "--exclude-standard", "-z"])?;
+    for file in untracked.split('\0').filter(|f| !f.is_empty()) {
+        // --no-index exits with 1 when the files differ, which is the case here
+        let out = run(&repo, &["diff", "--no-color", "--no-index", "--", "/dev/null", file])?;
+        patch.push_str(&String::from_utf8_lossy(&out.stdout));
+    }
+    if patch.trim().is_empty() {
+        return Err("Nenhuma alteração para compartilhar".into());
+    }
+    Ok(patch)
+}
+
+// ---------- Commit signing (SSH or GPG) ----------
+
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct Signing {
+    enabled: bool,
+    /// "ssh" or "openpgp" (GPG)
+    format: String,
+    /// SSH: path of the .pub file; GPG: key id
+    key: String,
+}
+
+/// Effective signing settings (`git config` merges global and repo values)
+fn read_signing(dir: &str, scope: &[&str]) -> Signing {
+    let get = |k: &str| git(dir, &[&["config"], scope, &["--get", k]].concat()).map(|v| v.trim().to_string()).unwrap_or_default();
+    Signing {
+        enabled: get("commit.gpgsign") == "true",
+        format: match get("gpg.format").as_str() {
+            "" => "openpgp".into(),
+            f => f.into(),
+        },
+        key: get("user.signingkey"),
+    }
+}
+
+/// Writes signing settings to `scope` (["--global"] in the app). For SSH it also
+/// writes an allowed-signers file with the user's own key, so git can verify
+/// (and show as "verified") the commits signed with it.
+fn write_signing(dir: &str, scope: &[&str], s: &Signing, allowed_file: &Path) -> Res<()> {
+    let set = |k: &str, v: &str| git(dir, &[&["config"], scope, &[k, v]].concat()).map(drop);
+    set("commit.gpgsign", if s.enabled { "true" } else { "false" })?;
+    set("tag.gpgsign", if s.enabled { "true" } else { "false" })?;
+    if !s.enabled {
+        return Ok(());
+    }
+    set("gpg.format", &s.format)?;
+    set("user.signingkey", s.key.trim())?;
+    if s.format == "ssh" {
+        let public = std::fs::read_to_string(s.key.trim()).map_err(|e| format!("Chave {}: {e}", s.key.trim()))?;
+        let email = git(dir, &["config", "--get", "user.email"]).unwrap_or_default();
+        if let Some(parent) = allowed_file.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+        }
+        // format: "<email> <key type> <key>"
+        std::fs::write(allowed_file, format!("{} {}\n", email.trim(), public.trim())).map_err(|e| e.to_string())?;
+        set("gpg.ssh.allowedSignersFile", &allowed_file.to_string_lossy().replace('\\', "/"))?;
+    }
+    Ok(())
+}
+
+#[tauri::command(async)]
+pub fn signing(repo: String) -> Res<Signing> {
+    Ok(read_signing(&repo, &[]))
+}
+
+#[tauri::command(async)]
+pub fn set_signing(settings: Signing) -> Res<()> {
+    write_signing(".", &["--global"], &settings, &identity_dir()?.join("allowed_signers"))
+}
+
+/// Public SSH keys in ~/.ssh, to pick one for signing
+#[tauri::command(async)]
+pub fn ssh_keys() -> Res<Vec<String>> {
+    let home = std::env::var("USERPROFILE").or_else(|_| std::env::var("HOME")).map_err(|e| e.to_string())?;
+    let dir = Path::new(&home).join(".ssh");
+    let mut keys: Vec<String> = std::fs::read_dir(dir)
+        .map(|rd| {
+            rd.flatten()
+                .map(|e| e.path())
+                .filter(|p| p.extension().is_some_and(|x| x == "pub"))
+                .map(|p| p.to_string_lossy().replace('\\', "/"))
+                .collect()
+        })
+        .unwrap_or_default();
+    keys.sort();
+    Ok(keys)
+}
+
+#[derive(Serialize, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct SignatureInfo {
+    /// git's %G?: G good, U good but unknown validity, X/Y expired, R revoked, B bad, E can't check, N none
+    status: String,
+    signer: String,
+}
+
+#[tauri::command(async)]
+pub fn commit_signature(repo: String, hash: String) -> Res<SignatureInfo> {
+    let out = git(&repo, &["log", "-1", "--format=%G?%x1f%GS", &hash, "--"])?;
+    let (status, signer) = out.trim().split_once(FS).unwrap_or((out.trim(), ""));
+    Ok(SignatureInfo { status: status.into(), signer: signer.into() })
+}
+
 // ---------- Commit message suggested by AI (Claude Code CLI) ----------
 
 /// Biggest diff sent to the model; longer ones are cut (the summary still works)
@@ -1202,10 +1315,15 @@ fn write_identities(scope: &[&str], dir: &Path, list: &[Identity]) -> Res<()> {
     }
     std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
     for (i, id) in list.iter().enumerate() {
-        let folder = id.folder.trim().replace('\\', "/");
-        if folder.is_empty() {
+        if id.folder.trim().is_empty() {
             continue;
         }
+        // git matches gitdir against the real path: resolve short names (RUNNER~1),
+        // links and casing first, or the include would silently never apply
+        let folder = std::fs::canonicalize(id.folder.trim())
+            .map(|p| p.to_string_lossy().trim_start_matches(r"\\?\").to_string())
+            .unwrap_or_else(|_| id.folder.trim().to_string())
+            .replace('\\', "/");
         // trailing slash = every repository below the folder
         let folder = if folder.ends_with('/') { folder } else { format!("{folder}/") };
         let file = dir.join(format!("identity-{i}.gitconfig")).to_string_lossy().replace('\\', "/");
@@ -2143,6 +2261,50 @@ mod tests {
         println!("{msg}");
         assert!(msg.contains(':'));
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn ssh_signing_and_verified_badge() {
+        let (dir, repo) = temp_repo("sign");
+        let r = || repo.clone();
+        let key = dir.join("chave");
+        let made = Command::new("ssh-keygen").args(["-q", "-t", "ed25519", "-N", "", "-C", "teste", "-f"]).arg(&key).output();
+        if !made.is_ok_and(|o| o.status.success()) {
+            eprintln!("ssh-keygen indisponível, teste pulado");
+            return;
+        }
+        let pubkey = format!("{}.pub", key.to_string_lossy().replace('\\', "/"));
+        let s = Signing { enabled: true, format: "ssh".into(), key: pubkey.clone() };
+        // repo-local config in the test, --global in the app
+        write_signing(&repo, &["--local"], &s, &dir.join("allowed_signers")).unwrap();
+        assert_eq!(read_signing(&repo, &["--local"]), s);
+
+        std::fs::write(dir.join("f.txt"), "assinado\n").unwrap();
+        git(&repo, &["commit", "-qam", "assinado"]).unwrap();
+        let sig = commit_signature(r(), "HEAD".into()).unwrap();
+        assert_eq!(sig.status, "G", "{sig:?}");
+        assert_eq!(commit_signature(r(), "HEAD~1".into()).unwrap().status, "N");
+
+        write_signing(&repo, &["--local"], &Signing { enabled: false, ..s }, &dir.join("allowed_signers")).unwrap();
+        assert!(!read_signing(&repo, &["--local"]).enabled);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn patch_with_new_files_applies_elsewhere() {
+        let (dir, repo) = temp_repo("patch");
+        assert!(working_patch(repo.clone()).is_err());
+        std::fs::write(dir.join("f.txt"), "base\nmudou\n").unwrap();
+        std::fs::write(dir.join("novo.txt"), "arquivo novo\n").unwrap();
+        let patch = working_patch(repo.clone()).unwrap();
+        assert!(patch.contains("+mudou") && patch.contains("novo.txt"));
+
+        // the patch recreates the same changes on a clean copy
+        let (dir2, repo2) = temp_repo("patch-dest");
+        git_with_input(&repo2, &["apply", "-"], Some(&patch)).unwrap();
+        assert_eq!(std::fs::read_to_string(dir2.join("novo.txt")).unwrap().replace("\r\n", "\n"), "arquivo novo\n");
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::remove_dir_all(&dir2);
     }
 
     #[test]
