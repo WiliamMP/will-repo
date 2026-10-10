@@ -88,6 +88,10 @@ export type PullRequest = {
 export type PullRequests = { defaultBranch: string; items: PullRequest[] };
 export type DeviceCode = { deviceCode: string; userCode: string; verificationUri: string; interval: number };
 
+export type Submodule = { path: string; absPath: string; hash: string; state: "ok" | "uninitialized" | "modified" | "conflict" };
+export type Worktree = { path: string; head: string; branch: string | null; main: boolean };
+export type LfsStatus = { installed: boolean; patterns: string[]; files: string[] };
+
 export type ReflogEntry = { hash: string; selector: string; action: string; message: string; timestamp: number };
 export type UndoPlan = { description: string };
 export type RestoreAction = "branch" | "checkout" | "reset";
@@ -183,6 +187,14 @@ export const git = {
     invoke<void>("finish_branch", { repo, name, base, tag }),
   /** returns the commit the branch pointed to (for undo) */
   deleteBranch: (repo: string, name: string, force: boolean) => invoke<string>("delete_branch", { repo, name, force }),
+  submodules: (repo: string) => invoke<Submodule[]>("submodules", { repo }),
+  submoduleUpdate: (repo: string, path?: string) => invoke<void>("submodule_update", { repo, path: path ?? null }),
+  worktrees: (repo: string) => invoke<Worktree[]>("worktrees", { repo }),
+  worktreeAdd: (repo: string, path: string, branch: string, newBranch: boolean) =>
+    invoke<void>("worktree_add", { repo, path, branch, newBranch }),
+  worktreeRemove: (repo: string, path: string, force: boolean) => invoke<void>("worktree_remove", { repo, path, force }),
+  lfsStatus: (repo: string) => invoke<LfsStatus>("lfs_status", { repo }),
+  lfsTrack: (repo: string, pattern: string, track: boolean) => invoke<void>("lfs_track", { repo, pattern, track }),
   reflog: (repo: string, limit: number) => invoke<ReflogEntry[]>("reflog", { repo, limit }),
   undoPreview: (repo: string) => invoke<UndoPlan>("undo_preview", { repo }),
   undo: (repo: string) => invoke<string>("undo", { repo }),

@@ -9,6 +9,8 @@ import {
   type RepoState,
   type Stash,
   type Status,
+  type Submodule,
+  type Worktree,
   type Tracking,
 } from "@/lib/git";
 
@@ -19,6 +21,8 @@ type Data = {
   tracking: Tracking;
   stashes: Stash[];
   state: RepoState;
+  submodules: Submodule[];
+  worktrees: Worktree[];
   /** true when the log hit the limit, so older commits exist */
   hasMore: boolean;
 };
@@ -56,15 +60,18 @@ export function useRepo(path: string) {
     if (!repo) return;
     try {
       const p = repo.path;
-      const [commits, refs, status, tracking, stashes, state] = await Promise.all([
+      const [commits, refs, status, tracking, stashes, state, submodules, worktrees] = await Promise.all([
         git.log(p, limit.current, focus),
         git.refs(p),
         git.status(p),
         git.tracking(p),
         git.stashList(p),
         git.state(p),
+        // extras: a failure here must not hide the whole repository
+        git.submodules(p).catch(() => []),
+        git.worktrees(p).catch(() => []),
       ]);
-      setData({ commits, refs, status, tracking, stashes, state, hasMore: commits.length >= limit.current });
+      setData({ commits, refs, status, tracking, stashes, state, submodules, worktrees, hasMore: commits.length >= limit.current });
     } catch (e) {
       toast.error(String(e));
     }

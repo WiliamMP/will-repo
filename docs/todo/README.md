@@ -46,9 +46,6 @@ Recursos inspirados no Sourcetree, no GitKraken e no Fork, repensados para o est
 
 ### Fluxos e estrutura
 
-- [ ] **Submódulos** [Sourcetree/Fork]: listar, atualizar e abrir o submódulo em nova aba. (médio)
-- [ ] **Git LFS** [Sourcetree/Fork]: mostrar arquivos LFS, rastrear e destrastrear extensões. (médio)
-- [ ] **Worktrees**: abrir outra branch em pasta paralela, cada uma na sua aba. (médio)
 - [ ] **Terminal integrado** [GitKraken]: painel de terminal na pasta do repositório (Ctrl+`). (médio)
 
 ### Dashboard e GitHub
@@ -79,3 +76,4 @@ Recursos inspirados no Sourcetree, no GitKraken e no Fork, repensados para o est
 - [x] Navegador de arquivos em qualquer commit (árvore, conteúdo, imagens), blame e histórico do arquivo
 - [x] Máquina do tempo (reflog) com branch/checkout/voltar para cá, e Ctrl+Z para commit, amend, checkout, merge, pull, reset, rebase e branch excluída
 - [x] Arrastar e soltar branches (grafo e sidebar) com menu mesclar/rebase/cherry-pick; modelos de branch (feature/, fix/, release/, hotfix/) com base e "Finalizar"
+- [x] Submódulos (estado, baixar/atualizar, abrir em nova aba), worktrees (criar, abrir em aba, remover) e Git LFS (padrões e arquivos)

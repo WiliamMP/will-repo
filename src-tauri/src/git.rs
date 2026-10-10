@@ -553,6 +553,147 @@ pub fn restore(repo: String, hash: String, action: RestoreAction, name: Option<S
     .map(drop)
 }
 
+// ---------- Repository structure: submodules, worktrees, LFS ----------
+
+#[derive(Serialize, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct Submodule {
+    path: String,
+    /// full path, to open it in a new tab
+    abs_path: String,
+    hash: String,
+    /// "ok" | "uninitialized" | "modified" (checked out at another commit) | "conflict"
+    state: &'static str,
+}
+
+/// `git submodule status`: "<state char><sha> <path> (<describe>)"
+fn parse_submodules(repo: &str, out: &str) -> Vec<Submodule> {
+    out.lines()
+        .filter(|l| l.len() > 41)
+        .map(|l| {
+            let state = match l.as_bytes()[0] {
+                b'-' => "uninitialized",
+                b'+' => "modified",
+                b'U' => "conflict",
+                _ => "ok",
+            };
+            let rest = &l[1..];
+            let (hash, rest) = rest.split_once(' ').unwrap_or((rest, ""));
+            let path = rest.split(" (").next().unwrap_or(rest).trim().to_string();
+            Submodule {
+                abs_path: Path::new(repo).join(&path).to_string_lossy().replace('\\', "/"),
+                path,
+                hash: hash.into(),
+                state,
+            }
+        })
+        .collect()
+}
+
+#[tauri::command(async)]
+pub fn submodules(repo: String) -> Res<Vec<Submodule>> {
+    let out = git(&repo, &["submodule", "status", "--recursive"]).unwrap_or_default();
+    Ok(parse_submodules(&repo, &out))
+}
+
+/// Clones missing submodules and checks each one out at the commit the repo expects
+#[tauri::command(async)]
+pub fn submodule_update(repo: String, path: Option<String>) -> Res<()> {
+    let mut args = vec!["submodule", "update", "--init", "--recursive"];
+    if let Some(p) = &path {
+        args.extend(["--", p.as_str()]);
+    }
+    git(&repo, &args).map(drop)
+}
+
+#[derive(Serialize, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct Worktree {
+    path: String,
+    head: String,
+    /// None = detached HEAD
+    branch: Option<String>,
+    /// the original folder (cannot be removed)
+    main: bool,
+}
+
+/// `git worktree list --porcelain`: blocks of "worktree <path>", "HEAD <sha>", "branch <ref>"
+fn parse_worktrees(out: &str) -> Vec<Worktree> {
+    out.split("\n\n")
+        .filter(|b| b.starts_with("worktree "))
+        .enumerate()
+        .map(|(i, block)| {
+            let field = |k: &str| block.lines().find_map(|l| l.strip_prefix(k)).map(str::to_string);
+            Worktree {
+                path: field("worktree ").unwrap_or_default(),
+                head: field("HEAD ").unwrap_or_default(),
+                branch: field("branch refs/heads/"),
+                main: i == 0,
+            }
+        })
+        .collect()
+}
+
+#[tauri::command(async)]
+pub fn worktrees(repo: String) -> Res<Vec<Worktree>> {
+    Ok(parse_worktrees(&git(&repo, &["worktree", "list", "--porcelain"])?))
+}
+
+/// A second folder with another branch checked out. `new_branch` creates it from HEAD.
+#[tauri::command(async)]
+pub fn worktree_add(repo: String, path: String, branch: String, new_branch: bool) -> Res<()> {
+    if new_branch {
+        git(&repo, &["worktree", "add", "-b", &branch, &path]).map(drop)
+    } else {
+        git(&repo, &["worktree", "add", &path, &branch]).map(drop)
+    }
+}
+
+/// Deletes the folder (its branch stays). `force` also discards its uncommitted changes.
+#[tauri::command(async)]
+pub fn worktree_remove(repo: String, path: String, force: bool) -> Res<()> {
+    let mut args = vec!["worktree", "remove"];
+    if force {
+        args.push("--force");
+    }
+    args.push(&path);
+    git(&repo, &args).map(drop)
+}
+
+#[derive(Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct LfsStatus {
+    /// git-lfs is installed on this machine
+    installed: bool,
+    /// tracked patterns from .gitattributes ("*.psd")
+    patterns: Vec<String>,
+    /// files stored in LFS at HEAD
+    files: Vec<String>,
+}
+
+#[tauri::command(async)]
+pub fn lfs_status(repo: String) -> Res<LfsStatus> {
+    if git(&repo, &["lfs", "version"]).is_err() {
+        return Ok(LfsStatus { installed: false, patterns: vec![], files: vec![] });
+    }
+    // "Listing tracked patterns\n    *.psd (.gitattributes)\nListing excluded patterns"
+    let tracked = git(&repo, &["lfs", "track"]).unwrap_or_default();
+    let patterns = tracked
+        .lines()
+        .take_while(|l| !l.starts_with("Listing excluded"))
+        .filter_map(|l| l.strip_prefix("    "))
+        .map(|l| l.rsplit_once(" (").map_or(l, |(p, _)| p).trim().to_string())
+        .collect();
+    let files = git(&repo, &["lfs", "ls-files", "--name-only"]).unwrap_or_default().lines().map(String::from).collect();
+    Ok(LfsStatus { installed: true, patterns, files })
+}
+
+/// Start (`track`) or stop storing files matching `pattern` in LFS; edits .gitattributes
+#[tauri::command(async)]
+pub fn lfs_track(repo: String, pattern: String, track: bool) -> Res<()> {
+    git(&repo, &["lfs", if track { "track" } else { "untrack" }, &pattern]).map(drop)
+}
+
 // ---------- Files at any commit: tree, history, blame ----------
 
 /// Every file path at `rev` (a commit or "HEAD")
@@ -1832,6 +1973,49 @@ mod tests {
         assert_eq!(top.parents.len(), 2); // --no-ff merge commit
         assert!(dir.join("login.txt").exists());
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn submodules_worktrees_and_lfs() {
+        let (dir, repo) = temp_repo("struct");
+        let r = || repo.clone();
+        let (lib_dir, lib) = temp_repo("struct-lib");
+
+        // submodule from a local folder (file:// needs to be allowed explicitly)
+        git(&repo, &["-c", "protocol.file.allow=always", "submodule", "add", "-q", &lib, "libs/lib"]).unwrap();
+        git(&repo, &["commit", "-qm", "add submodule"]).unwrap();
+        let subs = submodules(r()).unwrap();
+        assert_eq!((subs[0].path.as_str(), subs[0].state), ("libs/lib", "ok"));
+        assert!(subs[0].abs_path.ends_with("libs/lib"));
+        assert_eq!(parse_submodules(&repo, &format!("-{} x/y", "a".repeat(40)))[0].state, "uninitialized");
+
+        // worktree with a new branch in a sibling folder, then remove it
+        let wt = dir.with_file_name(format!("{}-wt", dir.file_name().unwrap().to_string_lossy()));
+        let wt_s = wt.to_string_lossy().into_owned();
+        worktree_add(r(), wt_s.clone(), "outra".into(), true).unwrap();
+        let list = worktrees(r()).unwrap();
+        assert_eq!(list.len(), 2);
+        assert!(list[0].main && list[0].branch.as_deref() == Some("main"));
+        assert_eq!(list[1].branch.as_deref(), Some("outra"));
+        assert!(wt.join("f.txt").exists());
+        worktree_remove(r(), wt_s, false).unwrap();
+        assert_eq!(worktrees(r()).unwrap().len(), 1);
+
+        // LFS (skipped when git-lfs isn't installed)
+        if lfs_status(r()).unwrap().installed {
+            git(&repo, &["lfs", "install", "--local"]).unwrap();
+            lfs_track(r(), "*.psd".into(), true).unwrap();
+            std::fs::write(dir.join("arte.psd"), [0u8, 1, 2, 3]).unwrap();
+            git(&repo, &["add", "."]).unwrap();
+            git(&repo, &["commit", "-qm", "lfs"]).unwrap();
+            let st = lfs_status(r()).unwrap();
+            assert_eq!(st.patterns, vec!["*.psd"]);
+            assert_eq!(st.files, vec!["arte.psd"]);
+            lfs_track(r(), "*.psd".into(), false).unwrap();
+            assert!(lfs_status(r()).unwrap().patterns.is_empty());
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::remove_dir_all(&lib_dir);
     }
 
     #[test]

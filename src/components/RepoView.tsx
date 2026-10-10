@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { LucideIcon } from "lucide-react";
 import {
   AlertTriangle,
+  Boxes,
   Cloud,
   FolderTree,
   GitPullRequestArrow,
@@ -44,6 +45,7 @@ import { BranchDialog } from "@/components/BranchDialog";
 import { CommitDetails, StashDetails } from "@/components/CommitDetails";
 import { FileBrowser, type BrowserTarget } from "@/components/FileBrowser";
 import { TimeMachine } from "@/components/TimeMachine";
+import { LfsDialog, StructureSections, WorktreeDialog, type StructureActions } from "@/components/RepoStructure";
 import { History, type CommitActions } from "@/components/History";
 import { PullRequests } from "@/components/PullRequests";
 import { Sidebar, type BranchActions } from "@/components/Sidebar";
@@ -60,7 +62,13 @@ const confirm = (message: string, title: string, okLabel: string) =>
   ask(message, { title, kind: "warning", okLabel, cancelLabel: "Cancelar" });
 
 // Everything for one open repository. Each tab mounts its own RepoView.
-export function RepoView({ path }: { path: string }) {
+type RepoViewProps = {
+  path: string;
+  /** opens another repository (submodule, worktree) in a new tab */
+  onOpenRepo: (path: string) => void;
+};
+
+export function RepoView({ path, onOpenRepo }: RepoViewProps) {
   const api = useRepo(path);
   const { repo, data, busy, error, run, reload, loadMore, focus, setFocus } = api;
   const [selected, setSelected] = useState<Commit | null>(null);
@@ -72,6 +80,8 @@ export function RepoView({ path }: { path: string }) {
   const [stashOpen, setStashOpen] = useState(false);
   const [browser, setBrowser] = useState<BrowserTarget | null>(null);
   const [timeMachine, setTimeMachine] = useState(false);
+  const [worktreeOpen, setWorktreeOpen] = useState(false);
+  const [lfsOpen, setLfsOpen] = useState(false);
   // drag and drop of a branch onto another: the menu shows where it was dropped
   const [dropMenu, setDropMenu] = useState<{ source: string; target: string; x: number; y: number } | null>(null);
   const [defaultBase, setDefaultBase] = useState("main");
@@ -239,6 +249,24 @@ export function RepoView({ path }: { path: string }) {
     },
   };
 
+  const structureActions: StructureActions = {
+    openTab: onOpenRepo,
+    updateSubmodules: (sub) => run("submódulos", (p) => git.submoduleUpdate(p, sub), sub ? `${sub} atualizado` : "Submódulos atualizados"),
+    addWorktree: () => setWorktreeOpen(true),
+    removeWorktree: async (w) => {
+      if (!(await confirm(`Remover a pasta ${w.path}? A branch ${w.branch ?? ""} continua existindo.`, "Remover worktree", "Remover"))) return;
+      try {
+        await git.worktreeRemove(path, w.path, false);
+      } catch (e) {
+        // uncommitted changes there: offer to discard them
+        if (!(await confirm(`${e}\n\nRemover mesmo assim? As alterações não commitadas nessa pasta serão perdidas.`, "Worktree com alterações", "Remover à força"))) return;
+        await git.worktreeRemove(path, w.path, true).catch((err) => toast.error(String(err)));
+      }
+      reload();
+    },
+    openLfs: () => setLfsOpen(true),
+  };
+
   // Conflicts leave the operation in progress: the banner and the changes tab take over
   const commitActions: CommitActions = {
     cherryPick: (c) => run("cherry-pick", (p) => git.pick(p, c.hash, false), `${c.hash.slice(0, 7)} aplicado em ${head}`),
@@ -279,6 +307,11 @@ export function RepoView({ path }: { path: string }) {
         { id: "reload", title: "Atualizar", group: "Repositório", icon: RefreshCw, keywords: "recarregar refresh", shortcut: ["F5"], run: reload },
         { id: "branch", title: "Nova branch...", group: "Repositório", icon: GitBranch, keywords: "criar", run: () => setBranchOpen(true) },
         { id: "stash", title: "Guardar alterações (stash)...", group: "Repositório", icon: Archive, run: () => setStashOpen(true) },
+        { id: "worktree", title: "Nova worktree...", group: "Repositório", icon: FolderTree, keywords: "pasta paralela branch", run: () => setWorktreeOpen(true) },
+        { id: "lfs", title: "Git LFS...", group: "Repositório", icon: Boxes, keywords: "arquivos grandes track", run: () => setLfsOpen(true) },
+        ...(data.submodules.length
+          ? [{ id: "submodules", title: "Atualizar submódulos", group: "Repositório", icon: Boxes, run: () => structureActions.updateSubmodules() }]
+          : []),
         { id: "undo", title: "Desfazer última ação do git", group: "Repositório", icon: Undo2, keywords: "undo voltar", shortcut: ["Ctrl", "Z"], run: undoLast },
         { id: "time-machine", title: "Máquina do tempo (reflog)", group: "Repositório", icon: HistoryIcon, keywords: "reflog recuperar perdido", run: () => setTimeMachine(true) },
         { id: "browse", title: "Navegar pelos arquivos", group: "Repositório", icon: FolderTree, keywords: "blame árvore pasta conteúdo", run: () => setBrowser({ rev: "HEAD" }) },
@@ -385,6 +418,19 @@ export function RepoView({ path }: { path: string }) {
         </div>
       </header>
 
+      <WorktreeDialog
+        open={worktreeOpen}
+        onOpenChange={setWorktreeOpen}
+        repo={repo.path}
+        branches={data.refs.branches}
+        busy={data.worktrees.flatMap((w) => (w.branch ? [w.branch] : []))}
+        onCreate={async (dir, branch, isNew) => {
+          const ok = await run("worktree", (p) => git.worktreeAdd(p, dir, branch, isNew), `Worktree de ${branch} criada`);
+          if (ok) onOpenRepo(dir);
+          return ok;
+        }}
+      />
+      <LfsDialog open={lfsOpen} onOpenChange={setLfsOpen} repo={repo.path} />
       {dropMenu && <DropMenu {...dropMenu} head={head} remotes={data.refs.remotes} run={run} onClose={() => setDropMenu(null)} />}
       <TimeMachine repo={repo.path} open={timeMachine} onOpenChange={setTimeMachine} run={run} onUndo={() => {
         setTimeMachine(false);
@@ -414,6 +460,7 @@ export function RepoView({ path }: { path: string }) {
             }}
             actions={branchActions}
             hidden={focus.hidden}
+            extra={<StructureSections submodules={data.submodules} worktrees={data.worktrees} actions={structureActions} />}
           />
         </ResizablePanel>
         <ResizableHandle />

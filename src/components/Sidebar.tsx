@@ -39,9 +39,11 @@ type Props = {
   actions: BranchActions;
   /** branches hidden from the graph (focus mode) */
   hidden: string[];
+  /** submodules, worktrees, LFS (rendered after the stashes) */
+  extra?: ReactNode;
 };
 
-export function Sidebar({ refs, stashes, selectedStash, onSelectStash, actions, hidden }: Props) {
+export function Sidebar({ refs, stashes, selectedStash, onSelectStash, actions, hidden, extra }: Props) {
   const { branchTemplates } = useSettings();
   const [filter, setFilter] = useState("");
   const match = (names: string[]) => names.filter((n) => n.toLowerCase().includes(filter.toLowerCase()));
@@ -175,6 +177,7 @@ export function Sidebar({ refs, stashes, selectedStash, onSelectStash, actions, 
               ))}
             </div>
           )}
+          {extra}
         </div>
       </ScrollArea>
     </aside>

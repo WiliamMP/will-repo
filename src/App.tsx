@@ -273,7 +273,7 @@ export default function App({ gitError }: { gitError: string | null }) {
 
         {tabs.active ? (
           // key = path: switching tabs mounts a fresh view with its own state
-          <RepoView key={tabs.active} path={tabs.active} />
+          <RepoView key={tabs.active} path={tabs.active} onOpenRepo={openRepo} />
         ) : (
           <Dashboard
             repos={dashboardRepos}
