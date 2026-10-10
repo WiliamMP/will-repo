@@ -9,7 +9,6 @@ Lista de próximas funcionalidades do will-repo. Tamanho estimado entre parênte
 
 ## Integração com GitHub
 
-- [ ] **Ativar o Device Flow**: criar o OAuth App em github.com/settings/developers (com "Enable Device Flow") e colar o Client ID em `CLIENT_ID` no arquivo `src-tauri/src/github.rs`. (trivial)
 
 ## Conforto
 
@@ -75,3 +74,4 @@ Recursos inspirados no Sourcetree, no GitKraken e no Fork, repensados para o est
 - [x] CI no GitHub Actions (typecheck, build, cargo test no Windows); mensagem de commit sugerida pelo Claude (Claude Code CLI, sem chave de API)
 - [x] Assinatura de commits (SSH ou GPG) com selo "Verificado"; compartilhar alterações como Gist secreto
 - [x] Registry shadcn "Neon" gerado do próprio tema (`npm run registry`): tema claro/escuro, cores extras e componentes Magic UI; testado instalando num projeto Vite novo
+- [x] Device Flow ativado (OAuth App "will-repo"); login pelo app também quando o gh CLI já está conectado

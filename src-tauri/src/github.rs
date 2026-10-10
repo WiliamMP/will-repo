@@ -10,7 +10,7 @@ type Res<T> = Result<T, String>;
 /// Client ID of the GitHub OAuth App used for the Device Flow.
 /// It is public (not a secret). Create the app at github.com/settings/developers,
 /// enable "Device Flow" and paste the Client ID here.
-const CLIENT_ID: &str = "";
+const CLIENT_ID: &str = "Ov23liQGcAURHeTZJDhB";
 
 const USER_AGENT: &str = "will-repo";
 const KEYRING_SERVICE: &str = "will-repo";

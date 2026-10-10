@@ -247,9 +247,15 @@ function AccountPage() {
           </div>
         </div>
         {profile?.source === "gh" && (
-          <p className="mt-2 text-xs text-muted-foreground">
-            Conectado pelo login do gh CLI. Para sair, use <code>gh auth logout</code> no terminal.
-          </p>
+          <div className="mt-2 flex items-center gap-3 text-xs text-muted-foreground">
+            <p className="flex-1">
+              Conectado pelo login do gh CLI. Para sair dele, use <code>gh auth logout</code> no terminal.
+            </p>
+            {/* the app's own login (Device Flow) takes priority over gh's token */}
+            <Button size="xs" variant="outline" onClick={() => setLoginOpen(true)}>
+              <Github /> Entrar pelo will-repo
+            </Button>
+          </div>
         )}
       </Section>
 
@@ -260,8 +266,8 @@ function AccountPage() {
         >
           <Badge variant="outline">Credential Manager</Badge>
         </Row>
-        <Row label="Permissões pedidas" description="Ler o seu perfil e acessar repositórios (listar e criar pull requests).">
-          <code className="text-xs text-muted-foreground">read:user repo</code>
+        <Row label="Permissões pedidas" description="Ler o seu perfil, acessar repositórios (listar e criar pull requests) e criar Gists (compartilhar alterações).">
+          <code className="text-xs text-muted-foreground">read:user repo gist</code>
         </Row>
       </Section>
 
