@@ -15,6 +15,11 @@ import {
   Mail,
   TriangleAlert,
   X,
+  FolderPlus,
+  GitFork,
+  Layers,
+  Pencil,
+  Trash2,
 } from "lucide-react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { toast } from "sonner";
@@ -26,6 +31,18 @@ import { DotPattern } from "@/components/ui/dot-pattern";
 import { ShimmerButton } from "@/components/ui/shimmer-button";
 import { git, relativeDate, type DeviceCode, type GithubProfile, type RepoSummary, type UserInfo } from "@/lib/git";
 import { splashDone, splashStep } from "@/lib/splash";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuSub,
+  ContextMenuSubContent,
+  ContextMenuSubTrigger,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
+import { CloneDialog } from "@/components/CloneDialog";
+import { updateSettings, useSettings } from "@/hooks/use-settings";
 import { cn } from "@/lib/utils";
 
 /** GitHub mark (Octicons, MIT). lucide-react has no brand icons. */
@@ -52,6 +69,11 @@ type Card = { path: string; summary?: RepoSummary; error?: string };
 export function Dashboard({ repos, openTabs, onOpen, onPick, onForget }: Props) {
   const [user, setUser] = useState<UserInfo | null>(null);
   const [cards, setCards] = useState<Card[]>(() => repos.map((path) => ({ path })));
+  const [cloneOpen, setCloneOpen] = useState(false);
+  // bumping it reloads the cards (after "fetch all" of a group)
+  const [version, setVersion] = useState(0);
+  const { projectGroups: groups } = useSettings();
+  const setGroups = (projectGroups: typeof groups) => updateSettings({ projectGroups });
 
   useEffect(() => {
     let stale = false;
@@ -70,7 +92,36 @@ export function Dashboard({ repos, openTabs, onOpen, onPick, onForget }: Props) 
     return () => {
       stale = true;
     };
-  }, [repos]);
+  }, [repos, version]);
+
+  // ---- groups (like GitKraken workspaces): a repo is in at most one group ----
+  const moveTo = (path: string, group: string | null) =>
+    setGroups(
+      groups.map((g) => ({
+        ...g,
+        repos: g.name === group ? [...g.repos.filter((r) => r !== path), path] : g.repos.filter((r) => r !== path),
+      })),
+    );
+  const newGroup = (path?: string) => {
+    let n = groups.length + 1;
+    while (groups.some((g) => g.name === `Grupo ${n}`)) n++;
+    const name = `Grupo ${n}`;
+    setGroups([...groups.map((g) => ({ ...g, repos: g.repos.filter((r) => r !== path) })), { name, repos: path ? [path] : [] }]);
+  };
+  const fetchAll = async (group: { name: string; repos: string[] }) => {
+    const paths = group.repos.filter((p) => repos.includes(p));
+    toast.info(`Fetch em ${paths.length} projeto(s) de ${group.name}...`);
+    const results = await Promise.allSettled(paths.map((p) => git.fetch(p, true)));
+    const failed = results.filter((r) => r.status === "rejected").length;
+    if (failed) toast.error(`${failed} fetch(es) falharam (sem internet ou sem remote)`);
+    else toast.success(`${group.name}: fetch concluído`);
+    setVersion((v) => v + 1);
+  };
+  const grouped = new Set(groups.flatMap((g) => g.repos));
+  const sections = [
+    ...groups.map((g) => ({ group: g, cards: cards.filter((c) => g.repos.includes(c.path)) })),
+    { group: null, cards: cards.filter((c) => !grouped.has(c.path)) },
+  ];
 
   // All of the user's commits in the last year, from every project
   const myCommits = useMemo(() => cards.flatMap((c) => c.summary?.myCommits ?? []), [cards]);
@@ -90,11 +141,17 @@ export function Dashboard({ repos, openTabs, onOpen, onPick, onForget }: Props) 
         <div className="flex items-center gap-3">
           <h2 className="text-base font-semibold">Projetos</h2>
           <span className="text-xs text-muted-foreground">{cards.length} no total</span>
+          <Button variant="ghost" size="sm" className="ml-auto text-muted-foreground" onClick={() => newGroup()}>
+            <FolderPlus /> Novo grupo
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => setCloneOpen(true)}>
+            <GitFork /> Clonar
+          </Button>
           <ShimmerButton
             background="var(--primary)"
             borderRadius="8px"
             shimmerColor="#c4b5ff"
-            className="ml-auto h-8 gap-2 px-3 text-sm font-medium"
+            className="h-8 gap-2 px-3 text-sm font-medium"
             onClick={onPick}
           >
             <FolderOpen className="size-4" /> Abrir pasta (Ctrl+O)
@@ -108,18 +165,74 @@ export function Dashboard({ repos, openTabs, onOpen, onPick, onForget }: Props) 
             <p className="relative">Nenhum projeto ainda. Abra uma pasta com git para começar.</p>
           </div>
         ) : (
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-4">
-            {cards.map((c) => (
-              <ProjectCard
-                key={c.path}
-                card={c}
-                open={openTabs.includes(c.path)}
-                onOpen={() => onOpen(c.path)}
-                onForget={() => onForget(c.path)}
-              />
-            ))}
-          </div>
+          sections.map(({ group, cards: list }) =>
+            // the "no group" section only shows when there are groups or loose projects
+            !group && list.length === 0 ? null : (
+              <section key={group?.name ?? "__none"} className="flex flex-col gap-3">
+                {(group || groups.length > 0) && (
+                  <GroupHeader
+                    name={group?.name ?? "Sem grupo"}
+                    count={list.length}
+                    editable={!!group}
+                    onRename={(name) => group && setGroups(groups.map((g) => (g === group ? { ...g, name } : g)))}
+                    onDelete={() => group && setGroups(groups.filter((g) => g !== group))}
+                    onFetchAll={group && list.length ? () => fetchAll(group) : undefined}
+                  />
+                )}
+                {group && list.length === 0 && (
+                  <p className="rounded-lg border border-dashed p-4 text-center text-xs text-muted-foreground">
+                    Vazio. Clique com o botão direito num projeto para movê-lo para cá.
+                  </p>
+                )}
+                <div className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-4">
+                  {list.map((c) => (
+                    <ContextMenu key={c.path}>
+                      <ContextMenuTrigger asChild>
+                        <div>
+                          <ProjectCard card={c} open={openTabs.includes(c.path)} onOpen={() => onOpen(c.path)} onForget={() => onForget(c.path)} />
+                        </div>
+                      </ContextMenuTrigger>
+                      <ContextMenuContent>
+                        <ContextMenuSub>
+                          <ContextMenuSubTrigger>
+                            <Layers /> Mover para grupo
+                          </ContextMenuSubTrigger>
+                          <ContextMenuSubContent>
+                            {groups.map((g) => (
+                              <ContextMenuItem key={g.name} disabled={g === group} onSelect={() => moveTo(c.path, g.name)}>
+                                {g.name}
+                              </ContextMenuItem>
+                            ))}
+                            {groups.length > 0 && <ContextMenuSeparator />}
+                            <ContextMenuItem onSelect={() => newGroup(c.path)}>
+                              <FolderPlus /> Novo grupo
+                            </ContextMenuItem>
+                            {group && (
+                              <ContextMenuItem onSelect={() => moveTo(c.path, null)}>
+                                <X /> Tirar do grupo
+                              </ContextMenuItem>
+                            )}
+                          </ContextMenuSubContent>
+                        </ContextMenuSub>
+                        <ContextMenuSeparator />
+                        <ContextMenuItem variant="destructive" onSelect={() => onForget(c.path)}>
+                          <X /> Remover da lista
+                        </ContextMenuItem>
+                      </ContextMenuContent>
+                    </ContextMenu>
+                  ))}
+                </div>
+              </section>
+            ),
+          )
         )}
+        <CloneDialog
+          open={cloneOpen}
+          onOpenChange={setCloneOpen}
+          // next to the user's other projects, when there are any
+          suggestedParent={repos[0]?.replace(/[\\/][^\\/]+[\\/]?$/, "") ?? ""}
+          onCloned={onOpen}
+        />
       </div>
     </div>
   );
@@ -698,6 +811,72 @@ function Sparkline({ times }: { times: number[] }) {
             />
           </div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+/** Title of a project group: rename by clicking, fetch everything, delete */
+function GroupHeader({
+  name,
+  count,
+  editable,
+  onRename,
+  onDelete,
+  onFetchAll,
+}: {
+  name: string;
+  count: number;
+  editable: boolean;
+  onRename: (name: string) => void;
+  onDelete: () => void;
+  onFetchAll?: () => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(name);
+  const save = () => {
+    setEditing(false);
+    if (draft.trim() && draft.trim() !== name) onRename(draft.trim());
+    else setDraft(name);
+  };
+  return (
+    <div className="group flex items-center gap-2 border-b pb-2">
+      <Layers className="size-4 text-primary" />
+      {editing ? (
+        <input
+          autoFocus
+          className="rounded border bg-background px-1.5 text-sm font-semibold outline-none focus:border-primary"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={save}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") save();
+            if (e.key === "Escape") {
+              setDraft(name);
+              setEditing(false);
+            }
+          }}
+        />
+      ) : (
+        <h3 className="text-sm font-semibold">{name}</h3>
+      )}
+      <span className="text-xs text-muted-foreground">{count}</span>
+      <div className="ml-auto flex gap-1 opacity-60 group-hover:opacity-100">
+        {onFetchAll && (
+          <Button variant="ghost" size="xs" onClick={onFetchAll} title="Fetch em todos os projetos do grupo">
+            <RefreshCw /> Fetch em todos
+          </Button>
+        )}
+        {editable && (
+          <>
+            <Button variant="ghost" size="icon-xs" title="Renomear" aria-label="Renomear" onClick={() => setEditing(true)}>
+              <Pencil />
+            </Button>
+            <Button variant="ghost" size="icon-xs" className="text-destructive" title="Apagar o grupo (os projetos continuam)" aria-label="Apagar grupo" onClick={onDelete}>
+              <Trash2 />
+            </Button>
+          </>
+        )}
       </div>
     </div>
   );

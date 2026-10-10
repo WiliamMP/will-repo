@@ -88,6 +88,8 @@ export type PullRequest = {
 export type PullRequests = { defaultBranch: string; items: PullRequest[] };
 export type DeviceCode = { deviceCode: string; userCode: string; verificationUri: string; interval: number };
 
+export type GithubRepo = { nameWithOwner: string; description: string | null; url: string; private: boolean; updatedAt: string };
+
 export type Submodule = { path: string; absPath: string; hash: string; state: "ok" | "uninitialized" | "modified" | "conflict" };
 export type Worktree = { path: string; head: string; branch: string | null; main: boolean };
 export type LfsStatus = { installed: boolean; patterns: string[]; files: string[] };
@@ -115,6 +117,9 @@ export type DiffLine = {
 
 export const git = {
   openRepo: (path: string) => invoke<RepoInfo>("open_repo", { path }),
+  /** dest = the new folder (must not exist) */
+  cloneRepo: (url: string, dest: string) => invoke<RepoInfo>("clone_repo", { url, dest }),
+  githubRepos: () => invoke<GithubRepo[]>("github_repos"),
   /** "git version 2.x"; fails when git is not installed */
   version: () => invoke<string>("git_version"),
   userInfo: () => invoke<UserInfo>("user_info"),

@@ -32,6 +32,8 @@ pub fn run() {
             close_splash,
             git::git_version,
             git::open_repo,
+            git::clone_repo,
+            github::github_repos,
             git::log,
             git::refs,
             git::status,

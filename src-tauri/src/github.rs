@@ -205,6 +205,47 @@ fn parse_profile(body: &Value, source: &str) -> Res<GithubProfile> {
     })
 }
 
+// ---------- Your repositories (for cloning) ----------
+
+#[derive(Debug, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct GithubRepo {
+    name_with_owner: String,
+    description: Option<String>,
+    url: String,
+    private: bool,
+    updated_at: String,
+}
+
+const REPOS_QUERY: &str = "query { viewer { repositories(first: 100, orderBy: { field: UPDATED_AT, direction: DESC },
+  ownerAffiliations: [OWNER, COLLABORATOR, ORGANIZATION_MEMBER]) {
+  nodes { nameWithOwner description url isPrivate updatedAt } } } }";
+
+/// Repositories you own or collaborate on, most recently updated first
+#[tauri::command]
+pub async fn github_repos() -> Res<Vec<GithubRepo>> {
+    let (body, _) = graphql(REPOS_QUERY, json!({})).await?;
+    parse_repos(&body)
+}
+
+fn parse_repos(body: &Value) -> Res<Vec<GithubRepo>> {
+    if let Some(msg) = body["errors"][0]["message"].as_str() {
+        return Err(format!("GitHub: {msg}"));
+    }
+    Ok(body["data"]["viewer"]["repositories"]["nodes"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .map(|r| GithubRepo {
+            name_with_owner: r["nameWithOwner"].as_str().unwrap_or_default().into(),
+            description: r["description"].as_str().filter(|d| !d.is_empty()).map(String::from),
+            url: r["url"].as_str().unwrap_or_default().into(),
+            private: r["isPrivate"].as_bool().unwrap_or(false),
+            updated_at: r["updatedAt"].as_str().unwrap_or_default().into(),
+        })
+        .collect())
+}
+
 // ---------- Pull requests ----------
 
 /// (owner, name) from a GitHub remote URL: https://github.com/o/r.git, git@github.com:o/r.git, ssh://...
@@ -349,6 +390,15 @@ mod tests {
         assert_eq!((p.items[0].draft, p.items[0].ci.as_deref(), p.items[0].review.as_deref()), (true, Some("FAILURE"), Some("APPROVED")));
         assert_eq!((p.items[1].author.as_str(), p.items[1].ci.as_deref()), ("ghost", None));
         assert!(parse_prs(&json!({ "errors": [ { "message": "Could not resolve" } ] })).is_err());
+    }
+
+    #[test]
+    fn repos_from_graphql() {
+        let body = json!({ "data": { "viewer": { "repositories": { "nodes": [
+            { "nameWithOwner": "will/app", "description": "", "url": "https://github.com/will/app", "isPrivate": true, "updatedAt": "2026-10-09T00:00:00Z" }
+        ] } } } });
+        let r = parse_repos(&body).unwrap();
+        assert_eq!((r[0].name_with_owner.as_str(), r[0].description.as_deref(), r[0].private), ("will/app", None, true));
     }
 
     #[test]

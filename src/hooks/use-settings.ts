@@ -20,6 +20,10 @@ export type Settings = {
   terminal: "wt" | "powershell" | "pwsh" | "cmd" | "git-bash";
   /** branch templates: prefix, branch it starts from and merges into ("" = main/master), tag on finish */
   branchTemplates: BranchTemplate[];
+  /** last folder used for cloning */
+  cloneDir: string;
+  /** project groups on the dashboard (paths of the repos in each) */
+  projectGroups: { name: string; repos: string[] }[];
 };
 
 export type BranchTemplate = { prefix: string; base: string; tag: boolean };
@@ -40,6 +44,8 @@ export const DEFAULTS: Settings = {
     { prefix: "release/", base: "", tag: true },
     { prefix: "hotfix/", base: "", tag: true },
   ],
+  cloneDir: "",
+  projectGroups: [],
 };
 
 const KEY = "will-repo.settings";

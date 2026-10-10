@@ -91,7 +91,20 @@ pub fn git_version() -> Res<String> {
     git(".", &["--version"]).map(|v| v.trim().to_string())
 }
 
-#[derive(Serialize)]
+/// Clones `url` into the folder `dest` (which must not exist yet) and returns the repo info
+#[tauri::command(async)]
+pub fn clone_repo(url: String, dest: String) -> Res<RepoInfo> {
+    if Path::new(&dest).exists() {
+        return Err(format!("A pasta {dest} já existe"));
+    }
+    let parent = Path::new(&dest).parent().ok_or("Pasta inválida")?.to_string_lossy().into_owned();
+    std::fs::create_dir_all(&parent).map_err(|e| e.to_string())?;
+    // the login window of the Git Credential Manager may open for private repositories
+    git(&parent, &["clone", "--recurse-submodules", &url, &dest])?;
+    open_repo(dest)
+}
+
+#[derive(Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct RepoInfo {
     path: String,
@@ -2016,6 +2029,20 @@ mod tests {
         }
         let _ = std::fs::remove_dir_all(&dir);
         let _ = std::fs::remove_dir_all(&lib_dir);
+    }
+
+    #[test]
+    fn clone_a_local_repository() {
+        let (dir, repo) = temp_repo("clone-src");
+        let dest = dir.with_file_name(format!("{}-copia", dir.file_name().unwrap().to_string_lossy()));
+        let _ = std::fs::remove_dir_all(&dest);
+        let info = clone_repo(repo.clone(), dest.to_string_lossy().into_owned()).unwrap();
+        assert!(info.name.ends_with("-copia"));
+        assert!(dest.join("f.txt").exists());
+        // cloning again into the same folder is refused before running git
+        assert!(clone_repo(repo, dest.to_string_lossy().into_owned()).unwrap_err().contains("já existe"));
+        let _ = std::fs::remove_dir_all(&dest);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

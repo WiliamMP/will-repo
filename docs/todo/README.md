@@ -9,7 +9,6 @@ Lista de próximas funcionalidades do will-repo. Tamanho estimado entre parênte
 
 ## Integração com GitHub
 
-- [ ] **Clonar repositório** a partir da lista dos seus repos no GitHub. (pequeno)
 - [ ] **Ativar o Device Flow**: criar o OAuth App em github.com/settings/developers (com "Enable Device Flow") e colar o Client ID em `CLIENT_ID` no arquivo `src-tauri/src/github.rs`. (trivial)
 
 ## Conforto
@@ -49,7 +48,6 @@ Recursos inspirados no Sourcetree, no GitKraken e no Fork, repensados para o est
 
 ### Dashboard e GitHub
 
-- [ ] **Grupos de projetos** [workspaces do GitKraken]: agrupar repos no dashboard (Trabalho, Pessoal...) e fazer fetch em todos de uma vez. (médio)
 - [ ] **Central de pendências** [Launchpad do GitKraken + notificações do Fork]: no dashboard, PRs aguardando sua revisão, seus PRs abertos com status do CI e notificações do GitHub, de todos os projetos. (grande)
 - [ ] **Compartilhar um diff** [Cloud Patches do GitKraken]: enviar alterações ainda não commitadas como Gist privado, para mostrar a alguém. (médio)
 
@@ -77,3 +75,4 @@ Recursos inspirados no Sourcetree, no GitKraken e no Fork, repensados para o est
 - [x] Arrastar e soltar branches (grafo e sidebar) com menu mesclar/rebase/cherry-pick; modelos de branch (feature/, fix/, release/, hotfix/) com base e "Finalizar"
 - [x] Submódulos (estado, baixar/atualizar, abrir em nova aba), worktrees (criar, abrir em aba, remover) e Git LFS (padrões e arquivos)
 - [x] Terminal integrado (Ctrl+`): shell real em PTY com xterm.js, várias abas, tema Neon
+- [x] Clonar repositório (lista dos seus repos do GitHub ou URL) e grupos de projetos no dashboard com "Fetch em todos"
