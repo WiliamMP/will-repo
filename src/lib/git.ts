@@ -88,6 +88,16 @@ export type PullRequest = {
 export type PullRequests = { defaultBranch: string; items: PullRequest[] };
 export type DeviceCode = { deviceCode: string; userCode: string; verificationUri: string; interval: number };
 
+export type BlameLine = {
+  hash: string;
+  author: string;
+  email: string;
+  timestamp: number;
+  summary: string;
+  line: number;
+  text: string;
+};
+
 export type DiffLine = {
   kind: "hunk" | "ctx" | "add" | "del" | "info" | "marker" | "ours" | "base" | "theirs";
   old: number | null;
@@ -118,6 +128,10 @@ export const git = {
   repoSummary: (repo: string, email: string | null) => invoke<RepoSummary>("repo_summary", { repo, email }),
   log: (repo: string, limit: number, focus: Focus) => invoke<Commit[]>("log", { repo, limit, solo: focus.solo, hidden: focus.hidden }),
   search: (repo: string, query: string) => invoke<Commit[]>("search", { repo, query }),
+  /** every file path at a commit */
+  tree: (repo: string, rev: string) => invoke<string[]>("tree", { repo, rev }),
+  fileHistory: (repo: string, path: string, limit: number) => invoke<Commit[]>("file_history", { repo, path, limit }),
+  blame: (repo: string, rev: string, path: string) => invoke<BlameLine[]>("blame", { repo, rev, path }),
   refs: (repo: string) => invoke<Refs>("refs", { repo }),
   status: (repo: string) => invoke<Status>("status", { repo }),
   tracking: (repo: string) => invoke<Tracking>("tracking", { repo }),

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Check, ExternalLink, GitCommitHorizontal, Minus, Plus, Undo2 } from "lucide-react";
+import { Check, ExternalLink, GitCommitHorizontal, Minus, Plus, Undo2, UserRoundSearch } from "lucide-react";
 import { ask } from "@tauri-apps/plugin-dialog";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -26,13 +26,15 @@ type Props = {
   headPushed: boolean;
   /** recent commit subjects for the message assistant */
   recent: string[];
+  /** open blame/history of a file */
+  onFileHistory: (path: string) => void;
   run: (label: string, action: (path: string) => Promise<unknown>, success?: string) => Promise<boolean>;
 };
 
 // "Commit" tab: unstaged/staged lists, diff of the clicked file, message box
 type List = "unstaged" | "staged" | "conflicted";
 
-export function WorkingTree({ repo, status, state, headPushed, recent, run }: Props) {
+export function WorkingTree({ repo, status, state, headPushed, recent, onFileHistory, run }: Props) {
   const [pick, setPick] = useState<{ file: FileChange; list: List } | null>(null);
   const [diff, setDiff] = useState<DiffLine[] | null>(null);
   const [message, setMessage] = useState("");
@@ -203,6 +205,7 @@ export function WorkingTree({ repo, status, state, headPushed, recent, run }: Pr
           onSelect={(file) => setPick({ file, list: "unstaged" })}
           actions={(f) => (
             <>
+              {f.status !== "?" && f.status !== "A" && iconBtn("Blame e histórico", <UserRoundSearch />, () => onFileHistory(f.path))}
               {iconBtn("Descartar", <Undo2 />, () => discard([f]))}
               {iconBtn("Preparar", <Plus />, () => stage([f]))}
             </>

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { Archive, ChevronsDown, CirclePlus, Copy, Focus as FocusIcon, Loader2, Search, Tag, Undo2, X } from "lucide-react";
+import { Archive, ChevronsDown, CirclePlus, FolderTree, Copy, Focus as FocusIcon, Loader2, Search, Tag, Undo2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -25,6 +25,7 @@ export type CommitActions = {
   cherryPick: (commit: Commit) => void;
   revert: (commit: Commit) => void;
   tag: (commit: Commit) => void;
+  browse: (commit: Commit) => void;
 };
 
 type Props = {
@@ -183,6 +184,9 @@ export function History({ repo, commits, selected, onSelect, hasMore, onLoadMore
                   <ContextMenuSeparator />
                   <ContextMenuItem onSelect={() => actions.tag(c)}>
                     <Tag /> Criar tag aqui
+                  </ContextMenuItem>
+                  <ContextMenuItem onSelect={() => actions.browse(c)}>
+                    <FolderTree /> Navegar pelos arquivos
                   </ContextMenuItem>
                   <ContextMenuItem
                     onSelect={() => navigator.clipboard.writeText(c.hash).then(() => toast.success("Hash copiado"))}

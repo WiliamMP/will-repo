@@ -41,7 +41,7 @@ export function FileList({ files, selected, onSelect, actions, showStats }: Prop
               <span className="text-success">+{f.add}</span> <span className="text-destructive">-{f.del}</span>
             </span>
           )}
-          {actions && <span className="ml-auto flex shrink-0 opacity-0 group-hover:opacity-100">{actions(f)}</span>}
+          {actions && <span className={cn("flex shrink-0 opacity-0 group-hover:opacity-100", !showStats && "ml-auto")}>{actions(f)}</span>}
         </li>
       ))}
     </ul>

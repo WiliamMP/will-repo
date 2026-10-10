@@ -8,7 +8,7 @@ use std::process::{Command, Output, Stdio};
 
 use serde::{Deserialize, Serialize};
 
-use crate::parse::{self, Choice, Commit, DiffLine, FileChange, Refs, Stash, Status, FS};
+use crate::parse::{self, BlameLine, Choice, Commit, DiffLine, FileChange, Refs, Stash, Status, FS};
 
 type Res<T> = Result<T, String>;
 
@@ -401,6 +401,30 @@ pub fn create_branch(repo: String, name: String, checkout: bool) -> Res<()> {
     } else {
         git(&repo, &["branch", &name]).map(drop)
     }
+}
+
+// ---------- Files at any commit: tree, history, blame ----------
+
+/// Every file path at `rev` (a commit or "HEAD")
+#[tauri::command(async)]
+pub fn tree(repo: String, rev: String) -> Res<Vec<String>> {
+    let out = git(&repo, &["ls-tree", "-r", "--name-only", "-z", &rev])?;
+    Ok(out.split('\0').filter(|p| !p.is_empty()).map(String::from).collect())
+}
+
+/// Commits that changed `path`, newest first, following renames
+#[tauri::command(async)]
+pub fn file_history(repo: String, path: String, limit: usize) -> Res<Vec<Commit>> {
+    let n = limit.to_string();
+    let out = git(&repo, &["log", "--follow", "--decorate=full", "-n", &n, LOG_FORMAT, "--", &path])?;
+    Ok(parse::parse_log(&out))
+}
+
+/// Who last changed each line of `path` as of `rev`
+#[tauri::command(async)]
+pub fn blame(repo: String, rev: String, path: String) -> Res<Vec<BlameLine>> {
+    let out = git(&repo, &["blame", "--porcelain", &rev, "--", &path])?;
+    Ok(parse::parse_blame(&out))
 }
 
 // ---------- Search ----------
@@ -1558,6 +1582,31 @@ mod tests {
         assert_eq!(blob_bytes(&repo, "WORKTREE", "img.png").unwrap().len(), 5);
         // before the commit the file didn't exist: empty, not an error
         assert!(blob_bytes(&repo, "HEAD^", "img.png").unwrap().is_empty());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn tree_history_and_blame() {
+        let (dir, repo) = temp_repo("blame");
+        let r = || repo.clone();
+        std::fs::create_dir_all(dir.join("src")).unwrap();
+        std::fs::write(dir.join("src/a.txt"), "one\ntwo\n").unwrap();
+        git(&repo, &["add", "."]).unwrap();
+        git(&repo, &["commit", "-qm", "add a"]).unwrap();
+        std::fs::write(dir.join("src/a.txt"), "one\nTWO\n").unwrap();
+        git(&repo, &["-c", "user.name=Ana", "-c", "user.email=ana@x", "commit", "-qam", "change a"]).unwrap();
+
+        assert_eq!(tree(r(), "HEAD".into()).unwrap(), vec!["f.txt", "src/a.txt"]);
+        assert_eq!(tree(r(), "HEAD~2".into()).unwrap(), vec!["f.txt"]);
+
+        let hist: Vec<_> = file_history(r(), "src/a.txt".into(), 50).unwrap().into_iter().map(|c| c.subject).collect();
+        assert_eq!(hist, vec!["change a", "add a"]);
+
+        let b = blame(r(), "HEAD".into(), "src/a.txt".into()).unwrap();
+        assert_eq!((b[0].text.as_str(), b[0].summary.as_str()), ("one", "add a"));
+        assert_eq!((b[1].text.as_str(), b[1].author.as_str(), b[1].email.as_str()), ("TWO", "Ana", "ana@x"));
+        // blame of an older version
+        assert_eq!(blame(r(), "HEAD~1".into(), "src/a.txt".into()).unwrap()[1].text, "two");
         let _ = std::fs::remove_dir_all(&dir);
     }
 

@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { Copy } from "lucide-react";
+import { Copy, FolderTree, UserRoundSearch } from "lucide-react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -29,9 +29,15 @@ export function IssueLinks({ text, github }: { text: string; github: string | nu
   );
 }
 
-type CommitProps = { repo: string; commit: Commit; github: string | null };
+type CommitProps = {
+  repo: string;
+  commit: Commit;
+  github: string | null;
+  /** open the file browser at this commit, optionally on one file's blame */
+  onBrowse: (path?: string) => void;
+};
 
-export function CommitDetails({ repo, commit, github }: CommitProps) {
+export function CommitDetails({ repo, commit, github, onBrowse }: CommitProps) {
   // The log only brings the subject; the body comes with the full message
   const [body, setBody] = useState("");
   useEffect(() => {
@@ -51,12 +57,31 @@ export function CommitDetails({ repo, commit, github }: CommitProps) {
       id={commit.hash}
       loadFiles={() => git.commitFiles(repo, commit.hash)}
       loadDiff={(file) => git.commitDiff(repo, commit.hash, file)}
+      fileActions={(f) =>
+        f.status !== "D" && (
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            aria-label="Blame e histórico"
+            title="Blame e histórico do arquivo"
+            onClick={(e) => {
+              e.stopPropagation();
+              onBrowse(f.path);
+            }}
+          >
+            <UserRoundSearch />
+          </Button>
+        )
+      }
       // merge commits compare with the first parent, like the text diff
       loadImages={(file) => Promise.all([git.blob(repo, `${commit.hash}^`, file), git.blob(repo, commit.hash, file)])}
       header={
         <>
           <div className="flex items-center gap-1">
             <code className="text-xs text-primary">{commit.hash.slice(0, 10)}</code>
+            <Button variant="ghost" size="xs" className="ml-auto text-muted-foreground" title="Todos os arquivos deste commit" onClick={() => onBrowse()}>
+              <FolderTree /> Arquivos
+            </Button>
             <Button
               variant="ghost"
               size="icon-xs"
@@ -110,10 +135,11 @@ type Props = {
   loadDiff: (file: string) => Promise<DiffLine[]>;
   /** old and new bytes, for image files */
   loadImages: (file: string) => Promise<[ArrayBuffer, ArrayBuffer]>;
+  fileActions?: (file: FileChange) => ReactNode;
 };
 
 // Shared layout: header, changed files, diff of the clicked file
-function ChangeDetails({ id, header, loadFiles, loadDiff, loadImages }: Props) {
+function ChangeDetails({ id, header, loadFiles, loadDiff, loadImages, fileActions }: Props) {
   const [files, setFiles] = useState<FileChange[]>([]);
   const [file, setFile] = useState<string | null>(null);
   const [diff, setDiff] = useState<DiffLine[] | null>(null);
@@ -149,7 +175,7 @@ function ChangeDetails({ id, header, loadFiles, loadDiff, loadImages }: Props) {
     <>
       <div className="border-b p-4">{header}</div>
       <ScrollArea className="max-h-[35%] shrink-0 border-b">
-        <FileList files={files} selected={file ?? undefined} onSelect={(f) => setFile(f.path)} showStats />
+        <FileList files={files} selected={file ?? undefined} onSelect={(f) => setFile(f.path)} showStats actions={fileActions} />
       </ScrollArea>
       {file && isImage(file) ? (
         <ImageDiff path={file} version={id} load={() => loadImages(file)} />

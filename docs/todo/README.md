@@ -6,7 +6,6 @@ Lista de próximas funcionalidades do will-repo. Tamanho estimado entre parênte
 ## Dia a dia no git
 
 - [ ] **Rebase interativo**: reordenar, squash, editar mensagem e descartar commits arrastando na lista. (grande)
-- [ ] **Histórico e blame de um arquivo**: quem mudou cada linha e quando. (médio)
 
 ## Integração com GitHub
 
@@ -38,7 +37,6 @@ Recursos inspirados no Sourcetree, no GitKraken e no Fork, repensados para o est
 ### Grafo e histórico
 
 - [ ] **Arrastar e soltar no grafo** [GitKraken]: arrastar uma branch sobre outra abre "Mesclar / Rebase / Cherry-pick". (médio)
-- [ ] **Navegar pelos arquivos em qualquer commit** [Fork]: árvore de pastas daquele ponto do histórico, com visualização do conteúdo. (médio)
 
 ### Diff e conflitos
 
@@ -82,3 +80,4 @@ Recursos inspirados no Sourcetree, no GitKraken e no Fork, repensados para o est
 - [x] Paleta de comandos (Ctrl+K): abas, recentes, tema, configurações, fetch/pull/push, branches, painéis e operações
 - [x] Grafo: avatares dos autores, stashes como nós, modo foco (isolar/esconder branches) com destaque do caminho do HEAD, minimapa
 - [x] Diff: virtualizado (só as linhas visíveis), modo lado a lado com seleção de linhas, diff de imagens (lado a lado, deslizar, sobrepor)
+- [x] Navegador de arquivos em qualquer commit (árvore, conteúdo, imagens), blame e histórico do arquivo

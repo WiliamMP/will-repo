@@ -99,6 +99,67 @@ pub fn parse_decorations(d: &str) -> Vec<RefLabel> {
 /// Gives each commit a column so branches don't overlap.
 /// `lanes[i]` holds the hash that column i is waiting for (the next parent to draw).
 /// Commits must come children-before-parents (git log --date-order does that).
+/// One line of `git blame`: who last changed it, in which commit
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BlameLine {
+    pub hash: String,
+    pub author: String,
+    pub email: String,
+    pub timestamp: i64,
+    pub summary: String,
+    /// line number in the file (1-based)
+    pub line: u32,
+    pub text: String,
+}
+
+/// Parses `git blame --porcelain`. Commit details (author, summary...) come only
+/// the first time a commit appears; later lines of the same commit reuse them.
+pub fn parse_blame(out: &str) -> Vec<BlameLine> {
+    #[derive(Default, Clone)]
+    struct Info {
+        author: String,
+        email: String,
+        timestamp: i64,
+        summary: String,
+    }
+    let mut known: std::collections::HashMap<String, Info> = std::collections::HashMap::new();
+    let mut lines = Vec::new();
+    let (mut hash, mut line) = (String::new(), 0u32);
+    for l in out.lines() {
+        if let Some(text) = l.strip_prefix('\t') {
+            let info = known.get(&hash).cloned().unwrap_or_default();
+            lines.push(BlameLine {
+                hash: hash.clone(),
+                author: info.author,
+                email: info.email,
+                timestamp: info.timestamp,
+                summary: info.summary,
+                line,
+                text: text.to_string(),
+            });
+            continue;
+        }
+        let (key, value) = l.split_once(' ').unwrap_or((l, ""));
+        // header: "<40-hex hash> <orig line> <final line> [<lines in group>]"
+        if key.len() == 40 && key.chars().all(|c| c.is_ascii_hexdigit()) {
+            hash = key.to_string();
+            line = value.split(' ').nth(1).and_then(|n| n.parse().ok()).unwrap_or(0);
+            known.entry(hash.clone()).or_default();
+            continue;
+        }
+        let info = known.entry(hash.clone()).or_default();
+        match key {
+            "author" => info.author = value.to_string(),
+            "author-mail" => info.email = value.trim_matches(|c| c == '<' || c == '>').to_string(),
+            "author-time" => info.timestamp = value.parse().unwrap_or(0),
+            "summary" => info.summary = value.to_string(),
+            _ => {}
+        }
+    }
+    lines
+}
+
 /// Parses `git stash list` with STASH_LOG_FORMAT into graph nodes.
 /// A stash commit has 2-3 parents (base, index, untracked files); only the base is kept,
 /// so the node hangs from the commit it was created on.
@@ -760,6 +821,23 @@ mod tests {
         assert_eq!(order, vec!["c", "s1", "b", "a"]);
         assign_lanes(&mut c);
         assert_ne!(c[1].lane, c[0].lane); // its own column
+    }
+
+    #[test]
+    fn blame_porcelain() {
+        let a = "a".repeat(40);
+        let b = "b".repeat(40);
+        let out = format!(
+            "{a} 1 1 2\nauthor Will\nauthor-mail <w@x>\nauthor-time 100\nsummary first\nfilename f\n\tline one\n\
+             {a} 2 2\n\tline two\n\
+             {b} 3 3 1\nauthor Ana\nauthor-mail <a@x>\nauthor-time 200\nsummary second\nprevious x f\nfilename f\n\tline three\n"
+        );
+        let l = parse_blame(&out);
+        assert_eq!(l.len(), 3);
+        assert_eq!((l[0].line, l[0].author.as_str(), l[0].email.as_str(), l[0].text.as_str()), (1, "Will", "w@x", "line one"));
+        // second line of the same commit reuses its details
+        assert_eq!((l[1].line, l[1].summary.as_str()), (2, "first"));
+        assert_eq!((l[2].hash.as_str(), l[2].author.as_str(), l[2].timestamp), (b.as_str(), "Ana", 200));
     }
 
     #[test]

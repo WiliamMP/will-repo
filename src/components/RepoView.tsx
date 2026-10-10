@@ -3,6 +3,7 @@ import type { LucideIcon } from "lucide-react";
 import {
   AlertTriangle,
   Cloud,
+  FolderTree,
   Code2,
   FileText,
   GitCommitHorizontal,
@@ -37,6 +38,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { AnimatedShinyText } from "@/components/ui/animated-shiny-text";
 import { BranchDialog } from "@/components/BranchDialog";
 import { CommitDetails, StashDetails } from "@/components/CommitDetails";
+import { FileBrowser, type BrowserTarget } from "@/components/FileBrowser";
 import { History, type CommitActions } from "@/components/History";
 import { PullRequests } from "@/components/PullRequests";
 import { Sidebar, type BranchActions } from "@/components/Sidebar";
@@ -63,6 +65,7 @@ export function RepoView({ path }: { path: string }) {
   const [github, setGithub] = useState<string | null>(null);
   const [branchOpen, setBranchOpen] = useState(false);
   const [stashOpen, setStashOpen] = useState(false);
+  const [browser, setBrowser] = useState<BrowserTarget | null>(null);
   useEffect(() => {
     git.githubUrl(path).then(setGithub, () => setGithub(null));
   }, [path]);
@@ -186,6 +189,17 @@ export function RepoView({ path }: { path: string }) {
     cherryPick: (c) => run("cherry-pick", (p) => git.pick(p, c.hash, false), `${c.hash.slice(0, 7)} aplicado em ${head}`),
     revert: (c) => run("revert", (p) => git.pick(p, c.hash, true), `${c.hash.slice(0, 7)} revertido`),
     tag: setTagTarget,
+    browse: (c) => setBrowser({ rev: c.hash }),
+  };
+
+  /** From blame/file history: show that commit in the main history */
+  const selectCommit = (hash: string) => {
+    const c = commits.find((x) => x.hash === hash);
+    if (!c) return toast.info("Esse commit está fora do histórico carregado. Use \"Carregar mais\" ou a busca.");
+    setBrowser(null);
+    setSelected(c);
+    setStashName(null);
+    setTab("details");
   };
 
   const stashAction = async (action: "apply" | "pop" | "drop") => {
@@ -210,6 +224,7 @@ export function RepoView({ path }: { path: string }) {
         { id: "reload", title: "Atualizar", group: "Repositório", icon: RefreshCw, keywords: "recarregar refresh", shortcut: ["F5"], run: reload },
         { id: "branch", title: "Nova branch...", group: "Repositório", icon: GitBranch, keywords: "criar", run: () => setBranchOpen(true) },
         { id: "stash", title: "Guardar alterações (stash)...", group: "Repositório", icon: Archive, run: () => setStashOpen(true) },
+        { id: "browse", title: "Navegar pelos arquivos", group: "Repositório", icon: FolderTree, keywords: "blame árvore pasta conteúdo", run: () => setBrowser({ rev: "HEAD" }) },
         { id: "search", title: "Buscar commits", group: "Repositório", icon: Search, keywords: "procurar histórico", run: () => document.getElementById("history-search")?.focus() },
         { id: "editor", title: "Abrir no editor", group: "Repositório", icon: Code2, keywords: "vscode code", run: () => openInEditor(repo!.path, "") },
         { id: "terminal", title: "Abrir terminal aqui", group: "Repositório", icon: SquareTerminal, run: () => git.openTerminal(repo!.path).catch((e) => toast.error(String(e))) },
@@ -305,6 +320,8 @@ export function RepoView({ path }: { path: string }) {
         </div>
       </header>
 
+      <FileBrowser repo={repo.path} target={browser} onClose={() => setBrowser(null)} onSelectCommit={selectCommit} />
+
       <TagDialog
         commit={tagTarget}
         onClose={() => setTagTarget(null)}
@@ -393,7 +410,12 @@ export function RepoView({ path }: { path: string }) {
                   }
                 />
               ) : commit ? (
-                <CommitDetails repo={repo.path} commit={commit} github={github} />
+                <CommitDetails
+                  repo={repo.path}
+                  commit={commit}
+                  github={github}
+                  onBrowse={(path) => setBrowser({ rev: commit.hash, path, tab: path ? "blame" : "content" })}
+                />
               ) : (
                 <p className="p-4 text-muted-foreground">Nenhum commit ainda.</p>
               )}
@@ -404,6 +426,7 @@ export function RepoView({ path }: { path: string }) {
                 status={data.status}
                 state={data.state}
                 headPushed={!!data.tracking.upstream && data.tracking.ahead === 0}
+                onFileHistory={(path) => setBrowser({ rev: "HEAD", path, tab: "blame" })}
                 recent={[...new Set(commits.slice(0, 30).map((c) => c.subject))].slice(0, 8)}
                 run={run}
               />
