@@ -111,7 +111,12 @@ pub async fn github_device_poll(device_code: String) -> Res<String> {
         return Ok("done".into());
     }
     match body["error"].as_str() {
-        Some(e @ ("authorization_pending" | "slow_down")) => Ok(if e == "slow_down" { "slow_down" } else { "pending" }.into()),
+        Some(e @ ("authorization_pending" | "slow_down")) => Ok(if e == "slow_down" {
+            "slow_down"
+        } else {
+            "pending"
+        }
+        .into()),
         Some("expired_token") => Err("O código expirou, tente de novo".into()),
         Some("access_denied") => Err("Acesso negado no GitHub".into()),
         _ => Err(format!("Resposta inesperada do GitHub: {body}")),
@@ -165,7 +170,12 @@ async fn send(req: reqwest::RequestBuilder) -> Res<(Value, &'static str)> {
 }
 
 async fn graphql(query: &str, variables: Value) -> Res<(Value, &'static str)> {
-    send(client()?.post("https://api.github.com/graphql").json(&json!({ "query": query, "variables": variables }))).await
+    send(
+        client()?
+            .post("https://api.github.com/graphql")
+            .json(&json!({ "query": query, "variables": variables })),
+    )
+    .await
 }
 
 #[tauri::command]
@@ -188,7 +198,12 @@ fn parse_profile(body: &Value, source: &str) -> Res<GithubProfile> {
         .into_iter()
         .flatten()
         .flat_map(|w| w["contributionDays"].as_array().into_iter().flatten())
-        .filter_map(|d| Some((d["date"].as_str()?.to_string(), d["contributionCount"].as_u64()?)))
+        .filter_map(|d| {
+            Some((
+                d["date"].as_str()?.to_string(),
+                d["contributionCount"].as_u64()?,
+            ))
+        })
         .collect();
     Ok(GithubProfile {
         login: text("login").ok_or("GitHub: resposta sem usuário")?,
@@ -217,7 +232,8 @@ pub struct GithubRepo {
     updated_at: String,
 }
 
-const REPOS_QUERY: &str = "query { viewer { repositories(first: 100, orderBy: { field: UPDATED_AT, direction: DESC },
+const REPOS_QUERY: &str =
+    "query { viewer { repositories(first: 100, orderBy: { field: UPDATED_AT, direction: DESC },
   ownerAffiliations: [OWNER, COLLABORATOR, ORGANIZATION_MEMBER]) {
   nodes { nameWithOwner description url isPrivate updatedAt } } } }";
 
@@ -238,7 +254,10 @@ fn parse_repos(body: &Value) -> Res<Vec<GithubRepo>> {
         .flatten()
         .map(|r| GithubRepo {
             name_with_owner: r["nameWithOwner"].as_str().unwrap_or_default().into(),
-            description: r["description"].as_str().filter(|d| !d.is_empty()).map(String::from),
+            description: r["description"]
+                .as_str()
+                .filter(|d| !d.is_empty())
+                .map(String::from),
             url: r["url"].as_str().unwrap_or_default().into(),
             private: r["isPrivate"].as_bool().unwrap_or(false),
             updated_at: r["updatedAt"].as_str().unwrap_or_default().into(),
@@ -269,20 +288,27 @@ pub async fn github_create_gist(description: String, file: String, content: Stri
 /// (owner, name) from a GitHub remote URL: https://github.com/o/r.git, git@github.com:o/r.git, ssh://...
 fn parse_remote(url: &str) -> Option<(String, String)> {
     let url = url.trim().trim_end_matches('/').trim_end_matches(".git");
-    let rest = url.split_once("github.com")?.1.trim_start_matches([':', '/']);
+    let rest = url
+        .split_once("github.com")?
+        .1
+        .trim_start_matches([':', '/']);
     let (owner, name) = rest.split_once('/')?;
-    (!owner.is_empty() && !name.is_empty() && !name.contains('/')).then(|| (owner.into(), name.into()))
+    (!owner.is_empty() && !name.is_empty() && !name.contains('/'))
+        .then(|| (owner.into(), name.into()))
 }
 
 fn origin(repo: &str) -> Res<(String, String)> {
-    let url = crate::git::git(repo, &["remote", "get-url", "origin"]).map_err(|_| "Repositório sem remote origin".to_string())?;
+    let url = crate::git::git(repo, &["remote", "get-url", "origin"])
+        .map_err(|_| "Repositório sem remote origin".to_string())?;
     parse_remote(&url).ok_or_else(|| format!("O origin não é do GitHub: {}", url.trim()))
 }
 
 /// "https://github.com/owner/name" when origin is on GitHub (for #123 links), None otherwise
 #[tauri::command(async)]
 pub fn github_url(repo: String) -> Option<String> {
-    origin(&repo).ok().map(|(owner, name)| format!("https://github.com/{owner}/{name}"))
+    origin(&repo)
+        .ok()
+        .map(|(owner, name)| format!("https://github.com/{owner}/{name}"))
 }
 
 #[derive(Debug, Serialize, PartialEq)]
@@ -309,7 +335,8 @@ pub struct PullRequests {
     items: Vec<PullRequest>,
 }
 
-const PRS_QUERY: &str = "query($owner: String!, $name: String!) { repository(owner: $owner, name: $name) {
+const PRS_QUERY: &str =
+    "query($owner: String!, $name: String!) { repository(owner: $owner, name: $name) {
   defaultBranchRef { name }
   pullRequests(states: OPEN, first: 50, orderBy: { field: UPDATED_AT, direction: DESC }) { nodes {
     number title url isDraft updatedAt reviewDecision headRefName baseRefName author { login }
@@ -344,17 +371,30 @@ fn parse_prs(body: &Value) -> Res<PullRequests> {
             draft: p["isDraft"].as_bool().unwrap_or(false),
             updated_at: s(&p["updatedAt"]),
             review: p["reviewDecision"].as_str().map(String::from),
-            ci: p["commits"]["nodes"][0]["commit"]["statusCheckRollup"]["state"].as_str().map(String::from),
+            ci: p["commits"]["nodes"][0]["commit"]["statusCheckRollup"]["state"]
+                .as_str()
+                .map(String::from),
         })
         .collect();
-    Ok(PullRequests { default_branch: s(&r["defaultBranchRef"]["name"]), items })
+    Ok(PullRequests {
+        default_branch: s(&r["defaultBranchRef"]["name"]),
+        items,
+    })
 }
 
 /// Opens a PR from the current branch (already pushed) into `base`; returns its URL
 #[tauri::command]
-pub async fn github_create_pr(repo: String, title: String, body: String, base: String, draft: bool) -> Res<String> {
+pub async fn github_create_pr(
+    repo: String,
+    title: String,
+    body: String,
+    base: String,
+    draft: bool,
+) -> Res<String> {
     let (owner, name) = origin(&repo)?;
-    let head = crate::git::git(&repo, &["rev-parse", "--abbrev-ref", "HEAD"])?.trim().to_string();
+    let head = crate::git::git(&repo, &["rev-parse", "--abbrev-ref", "HEAD"])?
+        .trim()
+        .to_string();
     if head == "HEAD" {
         return Err("HEAD destacado: faça checkout de uma branch".into());
     }
@@ -371,7 +411,10 @@ fn created_url(resp: &Value) -> Res<String> {
     if let Some(url) = resp["html_url"].as_str() {
         return Ok(url.into());
     }
-    let detail = resp["errors"][0]["message"].as_str().or(resp["message"].as_str()).unwrap_or("resposta inesperada");
+    let detail = resp["errors"][0]["message"]
+        .as_str()
+        .or(resp["message"].as_str())
+        .unwrap_or("resposta inesperada");
     Err(format!("GitHub: {detail}"))
 }
 
@@ -382,8 +425,14 @@ mod tests {
     #[test]
     fn remote_urls() {
         let o = |s: &str| parse_remote(s).map(|(a, b)| format!("{a}/{b}"));
-        assert_eq!(o("https://github.com/WiliamMP/will-repo.git").as_deref(), Some("WiliamMP/will-repo"));
-        assert_eq!(o("git@github.com:WiliamMP/will-repo.git\n").as_deref(), Some("WiliamMP/will-repo"));
+        assert_eq!(
+            o("https://github.com/WiliamMP/will-repo.git").as_deref(),
+            Some("WiliamMP/will-repo")
+        );
+        assert_eq!(
+            o("git@github.com:WiliamMP/will-repo.git\n").as_deref(),
+            Some("WiliamMP/will-repo")
+        );
         assert_eq!(o("ssh://git@github.com/a/b").as_deref(), Some("a/b"));
         assert_eq!(o("https://user@github.com/a/b/").as_deref(), Some("a/b"));
         assert_eq!(o("https://gitlab.com/a/b.git"), None);
@@ -405,8 +454,18 @@ mod tests {
             ] } } } });
         let p = parse_prs(&body).unwrap();
         assert_eq!(p.default_branch, "master");
-        assert_eq!((p.items[0].draft, p.items[0].ci.as_deref(), p.items[0].review.as_deref()), (true, Some("FAILURE"), Some("APPROVED")));
-        assert_eq!((p.items[1].author.as_str(), p.items[1].ci.as_deref()), ("ghost", None));
+        assert_eq!(
+            (
+                p.items[0].draft,
+                p.items[0].ci.as_deref(),
+                p.items[0].review.as_deref()
+            ),
+            (true, Some("FAILURE"), Some("APPROVED"))
+        );
+        assert_eq!(
+            (p.items[1].author.as_str(), p.items[1].ci.as_deref()),
+            ("ghost", None)
+        );
         assert!(parse_prs(&json!({ "errors": [ { "message": "Could not resolve" } ] })).is_err());
     }
 
@@ -416,7 +475,14 @@ mod tests {
             { "nameWithOwner": "will/app", "description": "", "url": "https://github.com/will/app", "isPrivate": true, "updatedAt": "2026-10-09T00:00:00Z" }
         ] } } } });
         let r = parse_repos(&body).unwrap();
-        assert_eq!((r[0].name_with_owner.as_str(), r[0].description.as_deref(), r[0].private), ("will/app", None, true));
+        assert_eq!(
+            (
+                r[0].name_with_owner.as_str(),
+                r[0].description.as_deref(),
+                r[0].private
+            ),
+            ("will/app", None, true)
+        );
     }
 
     #[test]
@@ -428,10 +494,19 @@ mod tests {
 
     #[test]
     fn create_pr_answer() {
-        assert_eq!(created_url(&json!({ "html_url": "https://github.com/a/b/pull/9" })).unwrap(), "https://github.com/a/b/pull/9");
+        assert_eq!(
+            created_url(&json!({ "html_url": "https://github.com/a/b/pull/9" })).unwrap(),
+            "https://github.com/a/b/pull/9"
+        );
         let dup = json!({ "message": "Validation Failed", "errors": [ { "message": "A pull request already exists for a:x." } ] });
-        assert_eq!(created_url(&dup).unwrap_err(), "GitHub: A pull request already exists for a:x.");
-        assert_eq!(created_url(&json!({ "message": "Not Found" })).unwrap_err(), "GitHub: Not Found");
+        assert_eq!(
+            created_url(&dup).unwrap_err(),
+            "GitHub: A pull request already exists for a:x."
+        );
+        assert_eq!(
+            created_url(&json!({ "message": "Not Found" })).unwrap_err(),
+            "GitHub: Not Found"
+        );
     }
 
     /// Real call: open PRs of this repo. Run with: cargo test -- --ignored
@@ -439,7 +514,11 @@ mod tests {
     #[ignore]
     fn live_prs() {
         let p = tauri::async_runtime::block_on(github_prs("..".into())).unwrap();
-        println!("default {}, {} PR(s) abertos", p.default_branch, p.items.len());
+        println!(
+            "default {}, {} PR(s) abertos",
+            p.default_branch,
+            p.items.len()
+        );
         assert!(!p.default_branch.is_empty());
     }
 
@@ -453,15 +532,24 @@ mod tests {
             ] } }
         } } });
         let p = parse_profile(&body, "gh").unwrap();
-        assert_eq!((p.login.as_str(), p.bio, p.followers, p.repositories), ("will", None, 3, 9));
-        assert_eq!(p.days, vec![("2026-10-04".to_string(), 2), ("2026-10-05".to_string(), 3)]);
+        assert_eq!(
+            (p.login.as_str(), p.bio, p.followers, p.repositories),
+            ("will", None, 3, 9)
+        );
+        assert_eq!(
+            p.days,
+            vec![("2026-10-04".to_string(), 2), ("2026-10-05".to_string(), 3)]
+        );
         assert_eq!(p.total_contributions, 5);
     }
 
     #[test]
     fn graphql_error_is_reported() {
         let body = json!({ "errors": [ { "message": "Bad credentials" } ] });
-        assert_eq!(parse_profile(&body, "app").unwrap_err(), "GitHub: Bad credentials");
+        assert_eq!(
+            parse_profile(&body, "app").unwrap_err(),
+            "GitHub: Bad credentials"
+        );
     }
 
     /// Real call to GitHub with the current login. Run with: cargo test -- --ignored
@@ -469,7 +557,14 @@ mod tests {
     #[ignore]
     fn live_profile() {
         let p = tauri::async_runtime::block_on(github_profile()).unwrap();
-        println!("{} ({}) {} contribuições, {} dias, via {}", p.login, p.name.unwrap_or_default(), p.total_contributions, p.days.len(), p.source);
+        println!(
+            "{} ({}) {} contribuições, {} dias, via {}",
+            p.login,
+            p.name.unwrap_or_default(),
+            p.total_contributions,
+            p.days.len(),
+            p.source
+        );
         assert!(!p.days.is_empty());
     }
 }

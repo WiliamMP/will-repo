@@ -8,7 +8,9 @@ use std::process::{Command, Output, Stdio};
 
 use serde::{Deserialize, Serialize};
 
-use crate::parse::{self, BlameLine, Choice, Commit, DiffLine, FileChange, Refs, Stash, Status, FS};
+use crate::parse::{
+    self, BlameLine, Choice, Commit, DiffLine, FileChange, Refs, Stash, Status, FS,
+};
 
 type Res<T> = Result<T, String>;
 
@@ -97,7 +99,11 @@ pub fn clone_repo(url: String, dest: String) -> Res<RepoInfo> {
     if Path::new(&dest).exists() {
         return Err(format!("A pasta {dest} já existe"));
     }
-    let parent = Path::new(&dest).parent().ok_or("Pasta inválida")?.to_string_lossy().into_owned();
+    let parent = Path::new(&dest)
+        .parent()
+        .ok_or("Pasta inválida")?
+        .to_string_lossy()
+        .into_owned();
     std::fs::create_dir_all(&parent).map_err(|e| e.to_string())?;
     // the login window of the Git Credential Manager may open for private repositories
     git(&parent, &["clone", "--recurse-submodules", &url, &dest])?;
@@ -135,16 +141,41 @@ const STASH_LOG_FORMAT: &str = "--format=%H%x1f%P%x1f%an%x1f%ae%x1f%at%x1f%gd%x1
 /// (their commits still show when another branch reaches them).
 // ponytail: re-reads everything on "load more", fine for tens of thousands of commits
 #[tauri::command(async)]
-pub fn log(repo: String, limit: usize, solo: Option<String>, hidden: Vec<String>) -> Res<Vec<Commit>> {
+pub fn log(
+    repo: String,
+    limit: usize,
+    solo: Option<String>,
+    hidden: Vec<String>,
+) -> Res<Vec<Commit>> {
     let n = limit.to_string();
-    let mut args: Vec<String> = ["log", "--date-order", "--decorate=full", "-n", &n, LOG_FORMAT]
-        .map(String::from)
-        .to_vec();
+    let mut args: Vec<String> = [
+        "log",
+        "--date-order",
+        "--decorate=full",
+        "-n",
+        &n,
+        LOG_FORMAT,
+    ]
+    .map(String::from)
+    .to_vec();
     match &solo {
         Some(branch) => {
             // a remote branch name like origin/x needs the full ref to be unambiguous
-            let is_local = git(&repo, &["rev-parse", "--verify", "--quiet", &format!("refs/heads/{branch}")]).is_ok();
-            args.push(if is_local { format!("refs/heads/{branch}") } else { format!("refs/remotes/{branch}") });
+            let is_local = git(
+                &repo,
+                &[
+                    "rev-parse",
+                    "--verify",
+                    "--quiet",
+                    &format!("refs/heads/{branch}"),
+                ],
+            )
+            .is_ok();
+            args.push(if is_local {
+                format!("refs/heads/{branch}")
+            } else {
+                format!("refs/remotes/{branch}")
+            });
             args.push("--".into());
         }
         None => {
@@ -247,11 +278,21 @@ fn diff_opts(context: u32, ignore_ws: bool) -> Vec<String> {
 }
 
 fn with_opts<'a>(base: &[&'a str], opts: &'a [String], rest: &[&'a str]) -> Vec<&'a str> {
-    base.iter().copied().chain(opts.iter().map(String::as_str)).chain(rest.iter().copied()).collect()
+    base.iter()
+        .copied()
+        .chain(opts.iter().map(String::as_str))
+        .chain(rest.iter().copied())
+        .collect()
 }
 
 #[tauri::command(async)]
-pub fn commit_diff(repo: String, hash: String, file: String, context: u32, ignore_ws: bool) -> Res<Vec<DiffLine>> {
+pub fn commit_diff(
+    repo: String,
+    hash: String,
+    file: String,
+    context: u32,
+    ignore_ws: bool,
+) -> Res<Vec<DiffLine>> {
     let opts = diff_opts(context, ignore_ws);
     let out = git(&repo, &with_opts(&SHOW, &opts, &[&hash, "--", &file]))?;
     Ok(parse::parse_diff(&out))
@@ -269,12 +310,21 @@ pub fn working_diff(
     let opts = diff_opts(context, false);
     let out = if untracked {
         // --no-index exits with 1 when files differ, which is the normal case here
-        let out = run(&repo, &with_opts(&["diff", "--no-index"], &opts, &["--", "/dev/null", &file]))?;
+        let out = run(
+            &repo,
+            &with_opts(&["diff", "--no-index"], &opts, &["--", "/dev/null", &file]),
+        )?;
         String::from_utf8_lossy(&out.stdout).into_owned()
     } else if staged {
-        git(&repo, &with_opts(&["diff", "--cached", "--no-renames"], &opts, &["--", &file]))?
+        git(
+            &repo,
+            &with_opts(&["diff", "--cached", "--no-renames"], &opts, &["--", &file]),
+        )?
     } else {
-        git(&repo, &with_opts(&["diff", "--no-renames"], &opts, &["--", &file]))?
+        git(
+            &repo,
+            &with_opts(&["diff", "--no-renames"], &opts, &["--", &file]),
+        )?
     };
     Ok(parse::parse_diff(&out))
 }
@@ -292,9 +342,17 @@ fn blob_bytes(repo: &str, rev: &str, path: &str) -> Res<Vec<u8>> {
     Ok(match rev {
         "WORKTREE" => std::fs::read(Path::new(repo).join(path)).unwrap_or_default(),
         _ => {
-            let spec = if rev == "INDEX" { format!(":{path}") } else { format!("{rev}:{path}") };
+            let spec = if rev == "INDEX" {
+                format!(":{path}")
+            } else {
+                format!("{rev}:{path}")
+            };
             let out = run(repo, &["show", &spec])?;
-            if out.status.success() { out.stdout } else { vec![] }
+            if out.status.success() {
+                out.stdout
+            } else {
+                vec![]
+            }
         }
     })
 }
@@ -329,7 +387,10 @@ pub fn unstage(repo: String, files: Vec<String>) -> Res<()> {
 /// A backup is saved first, so `restore_discard` can bring them back.
 #[tauri::command(async)]
 pub fn discard(repo: String, files: Vec<FileChange>) -> Res<()> {
-    backup(&repo, &files.iter().map(|f| f.path.as_str()).collect::<Vec<_>>())?;
+    backup(
+        &repo,
+        &files.iter().map(|f| f.path.as_str()).collect::<Vec<_>>(),
+    )?;
     let (untracked, tracked): (Vec<_>, Vec<_>) = files.iter().partition(|f| f.status == '?');
     if !tracked.is_empty() {
         let args: Vec<&str> = ["restore", "--"]
@@ -361,7 +422,9 @@ pub fn commit(repo: String, message: String, amend: bool) -> Res<()> {
 /// Full message (subject + body) of a commit; "HEAD" pre-fills the box when amending
 #[tauri::command(async)]
 pub fn commit_message(repo: String, rev: String) -> Res<String> {
-    Ok(git(&repo, &["log", "-1", "--format=%B", &rev, "--"])?.trim_end().to_string())
+    Ok(git(&repo, &["log", "-1", "--format=%B", &rev, "--"])?
+        .trim_end()
+        .to_string())
 }
 
 /// `background` (auto fetch): fail instead of opening the Git Credential Manager window
@@ -411,7 +474,11 @@ pub fn checkout(repo: String, branch: String, remote: bool) -> Res<()> {
 #[tauri::command(async)]
 pub fn create_branch(repo: String, name: String, checkout: bool, from: Option<String>) -> Res<()> {
     let from = from.filter(|f| !f.trim().is_empty());
-    let mut args = if checkout { vec!["switch", "-c", &name] } else { vec!["branch", &name] };
+    let mut args = if checkout {
+        vec!["switch", "-c", &name]
+    } else {
+        vec!["branch", &name]
+    };
     if let Some(f) = &from {
         // a remote branch as start point (origin/main) should not become the upstream
         args.extend(["--no-track", f.as_str()]);
@@ -423,11 +490,23 @@ pub fn create_branch(repo: String, name: String, checkout: bool, from: Option<St
 #[tauri::command(async)]
 pub fn default_branch(repo: String) -> Res<String> {
     for b in ["main", "master", "develop"] {
-        if git(&repo, &["rev-parse", "--verify", "--quiet", &format!("refs/heads/{b}")]).is_ok() {
+        if git(
+            &repo,
+            &[
+                "rev-parse",
+                "--verify",
+                "--quiet",
+                &format!("refs/heads/{b}"),
+            ],
+        )
+        .is_ok()
+        {
             return Ok(b.into());
         }
     }
-    Ok(git(&repo, &["rev-parse", "--abbrev-ref", "HEAD"])?.trim().to_string())
+    Ok(git(&repo, &["rev-parse", "--abbrev-ref", "HEAD"])?
+        .trim()
+        .to_string())
 }
 
 /// Branch templates: finishing feature/x merges it into `base` (always with a merge
@@ -438,7 +517,16 @@ pub fn finish_branch(repo: String, name: String, base: String, tag: Option<Strin
     git(&repo, &["switch", &base])?;
     git(&repo, &["merge", "--no-ff", "--no-edit", &name])?;
     if let Some(t) = tag.filter(|t| !t.trim().is_empty()) {
-        git(&repo, &["tag", "-a", t.trim(), "-m", &format!("Release {}", t.trim())])?;
+        git(
+            &repo,
+            &[
+                "tag",
+                "-a",
+                t.trim(),
+                "-m",
+                &format!("Release {}", t.trim()),
+            ],
+        )?;
     }
     git(&repo, &["branch", "-d", &name]).map(drop)
 }
@@ -470,7 +558,11 @@ fn parse_reflog(out: &str) -> Vec<ReflogEntry> {
             }
             // "commit (amend): msg" -> ("commit (amend)", "msg"); "merge feature: ..." -> "merge"
             let (head, message) = f[2].split_once(": ").unwrap_or((f[2], ""));
-            let action = if head.starts_with("merge ") { "merge" } else { head };
+            let action = if head.starts_with("merge ") {
+                "merge"
+            } else {
+                head
+            };
             Some(ReflogEntry {
                 hash: f[0].into(),
                 selector: f[1].into(),
@@ -486,9 +578,19 @@ fn parse_reflog(out: &str) -> Vec<ReflogEntry> {
 #[tauri::command(async)]
 pub fn reflog(repo: String, limit: usize) -> Res<Vec<ReflogEntry>> {
     let n = limit.to_string();
-    let out = git(&repo, &["reflog", "show", "-n", &n, "--format=%H%x1f%gd%x1f%gs%x1f%ct%x1e", "HEAD"])
-        // a new repository without commits has no reflog yet
-        .unwrap_or_default();
+    let out = git(
+        &repo,
+        &[
+            "reflog",
+            "show",
+            "-n",
+            &n,
+            "--format=%H%x1f%gd%x1f%gs%x1f%ct%x1e",
+            "HEAD",
+        ],
+    )
+    // a new repository without commits has no reflog yet
+    .unwrap_or_default();
     Ok(parse_reflog(&out))
 }
 
@@ -503,18 +605,42 @@ pub struct UndoPlan {
 
 /// What undoing the last move of HEAD means, based on the reflog
 fn plan_undo(repo: &str) -> Res<UndoPlan> {
-    let last = reflog(repo.into(), 1)?.into_iter().next().ok_or("Nada para desfazer ainda")?;
+    let last = reflog(repo.into(), 1)?
+        .into_iter()
+        .next()
+        .ok_or("Nada para desfazer ainda")?;
     let has_previous = git(repo, &["rev-parse", "--verify", "--quiet", "HEAD@{1}"]).is_ok();
-    let plan = |description: String, args: &[&str]| Ok(UndoPlan { description, args: args.iter().map(|a| a.to_string()).collect() });
+    let plan = |description: String, args: &[&str]| {
+        Ok(UndoPlan {
+            description,
+            args: args.iter().map(|a| a.to_string()).collect(),
+        })
+    };
     match last.action.as_str() {
         "commit" | "commit (amend)" | "cherry-pick" | "revert" if has_previous => plan(
             // --soft: the commit goes away, its changes stay staged
-            format!("Desfazer \"{}\" ({}). As alterações voltam para preparados.", last.message, last.action),
+            format!(
+                "Desfazer \"{}\" ({}). As alterações voltam para preparados.",
+                last.message, last.action
+            ),
             &["reset", "--soft", "HEAD@{1}"],
         ),
         "checkout" => {
-            let from = last.message.strip_prefix("moving from ").and_then(|m| m.split(" to ").next()).ok_or("Checkout sem origem")?;
-            let is_branch = git(repo, &["rev-parse", "--verify", "--quiet", &format!("refs/heads/{from}")]).is_ok();
+            let from = last
+                .message
+                .strip_prefix("moving from ")
+                .and_then(|m| m.split(" to ").next())
+                .ok_or("Checkout sem origem")?;
+            let is_branch = git(
+                repo,
+                &[
+                    "rev-parse",
+                    "--verify",
+                    "--quiet",
+                    &format!("refs/heads/{from}"),
+                ],
+            )
+            .is_ok();
             if is_branch {
                 plan(format!("Voltar para a branch {from}"), &["switch", from])
             } else {
@@ -522,12 +648,19 @@ fn plan_undo(repo: &str) -> Res<UndoPlan> {
             }
         }
         // a rebase leaves many reflog entries; ORIG_HEAD is where the branch was before it
-        a if a.starts_with("rebase") => plan("Desfazer o rebase (a branch volta para antes dele)".into(), &["reset", "--keep", "ORIG_HEAD"]),
+        a if a.starts_with("rebase") => plan(
+            "Desfazer o rebase (a branch volta para antes dele)".into(),
+            &["reset", "--keep", "ORIG_HEAD"],
+        ),
         // --keep: refuses instead of overwriting local changes
-        "merge" | "commit (merge)" | "pull" | "reset" if has_previous => {
-            plan(format!("Desfazer o {} ({})", last.action, last.message), &["reset", "--keep", "HEAD@{1}"])
-        }
-        _ => Err(format!("Não sei desfazer \"{}: {}\". Use a máquina do tempo.", last.action, last.message)),
+        "merge" | "commit (merge)" | "pull" | "reset" if has_previous => plan(
+            format!("Desfazer o {} ({})", last.action, last.message),
+            &["reset", "--keep", "HEAD@{1}"],
+        ),
+        _ => Err(format!(
+            "Não sei desfazer \"{}: {}\". Use a máquina do tempo.",
+            last.action, last.message
+        )),
     }
 }
 
@@ -540,7 +673,10 @@ pub fn undo_preview(repo: String) -> Res<UndoPlan> {
 #[tauri::command(async)]
 pub fn undo(repo: String) -> Res<String> {
     let plan = plan_undo(&repo)?;
-    git(&repo, &plan.args.iter().map(String::as_str).collect::<Vec<_>>())?;
+    git(
+        &repo,
+        &plan.args.iter().map(String::as_str).collect::<Vec<_>>(),
+    )?;
     Ok(plan.description)
 }
 
@@ -559,7 +695,14 @@ pub enum RestoreAction {
 #[tauri::command(async)]
 pub fn restore(repo: String, hash: String, action: RestoreAction, name: Option<String>) -> Res<()> {
     match action {
-        RestoreAction::Branch => git(&repo, &["branch", name.as_deref().ok_or("Falta o nome da branch")?, &hash]),
+        RestoreAction::Branch => git(
+            &repo,
+            &[
+                "branch",
+                name.as_deref().ok_or("Falta o nome da branch")?,
+                &hash,
+            ],
+        ),
         RestoreAction::Checkout => git(&repo, &["switch", "--detach", &hash]),
         RestoreAction::Reset => git(&repo, &["reset", "--keep", &hash]),
     }
@@ -594,7 +737,10 @@ fn parse_submodules(repo: &str, out: &str) -> Vec<Submodule> {
             let (hash, rest) = rest.split_once(' ').unwrap_or((rest, ""));
             let path = rest.split(" (").next().unwrap_or(rest).trim().to_string();
             Submodule {
-                abs_path: Path::new(repo).join(&path).to_string_lossy().replace('\\', "/"),
+                abs_path: Path::new(repo)
+                    .join(&path)
+                    .to_string_lossy()
+                    .replace('\\', "/"),
                 path,
                 hash: hash.into(),
                 state,
@@ -636,7 +782,12 @@ fn parse_worktrees(out: &str) -> Vec<Worktree> {
         .filter(|b| b.starts_with("worktree "))
         .enumerate()
         .map(|(i, block)| {
-            let field = |k: &str| block.lines().find_map(|l| l.strip_prefix(k)).map(str::to_string);
+            let field = |k: &str| {
+                block
+                    .lines()
+                    .find_map(|l| l.strip_prefix(k))
+                    .map(str::to_string)
+            };
             Worktree {
                 path: field("worktree ").unwrap_or_default(),
                 head: field("HEAD ").unwrap_or_default(),
@@ -649,7 +800,10 @@ fn parse_worktrees(out: &str) -> Vec<Worktree> {
 
 #[tauri::command(async)]
 pub fn worktrees(repo: String) -> Res<Vec<Worktree>> {
-    Ok(parse_worktrees(&git(&repo, &["worktree", "list", "--porcelain"])?))
+    Ok(parse_worktrees(&git(
+        &repo,
+        &["worktree", "list", "--porcelain"],
+    )?))
 }
 
 /// A second folder with another branch checked out. `new_branch` creates it from HEAD.
@@ -687,7 +841,11 @@ pub struct LfsStatus {
 #[tauri::command(async)]
 pub fn lfs_status(repo: String) -> Res<LfsStatus> {
     if git(&repo, &["lfs", "version"]).is_err() {
-        return Ok(LfsStatus { installed: false, patterns: vec![], files: vec![] });
+        return Ok(LfsStatus {
+            installed: false,
+            patterns: vec![],
+            files: vec![],
+        });
     }
     // "Listing tracked patterns\n    *.psd (.gitattributes)\nListing excluded patterns"
     let tracked = git(&repo, &["lfs", "track"]).unwrap_or_default();
@@ -697,14 +855,26 @@ pub fn lfs_status(repo: String) -> Res<LfsStatus> {
         .filter_map(|l| l.strip_prefix("    "))
         .map(|l| l.rsplit_once(" (").map_or(l, |(p, _)| p).trim().to_string())
         .collect();
-    let files = git(&repo, &["lfs", "ls-files", "--name-only"]).unwrap_or_default().lines().map(String::from).collect();
-    Ok(LfsStatus { installed: true, patterns, files })
+    let files = git(&repo, &["lfs", "ls-files", "--name-only"])
+        .unwrap_or_default()
+        .lines()
+        .map(String::from)
+        .collect();
+    Ok(LfsStatus {
+        installed: true,
+        patterns,
+        files,
+    })
 }
 
 /// Start (`track`) or stop storing files matching `pattern` in LFS; edits .gitattributes
 #[tauri::command(async)]
 pub fn lfs_track(repo: String, pattern: String, track: bool) -> Res<()> {
-    git(&repo, &["lfs", if track { "track" } else { "untrack" }, &pattern]).map(drop)
+    git(
+        &repo,
+        &["lfs", if track { "track" } else { "untrack" }, &pattern],
+    )
+    .map(drop)
 }
 
 // ---------- Files at any commit: tree, history, blame ----------
@@ -713,14 +883,30 @@ pub fn lfs_track(repo: String, pattern: String, track: bool) -> Res<()> {
 #[tauri::command(async)]
 pub fn tree(repo: String, rev: String) -> Res<Vec<String>> {
     let out = git(&repo, &["ls-tree", "-r", "--name-only", "-z", &rev])?;
-    Ok(out.split('\0').filter(|p| !p.is_empty()).map(String::from).collect())
+    Ok(out
+        .split('\0')
+        .filter(|p| !p.is_empty())
+        .map(String::from)
+        .collect())
 }
 
 /// Commits that changed `path`, newest first, following renames
 #[tauri::command(async)]
 pub fn file_history(repo: String, path: String, limit: usize) -> Res<Vec<Commit>> {
     let n = limit.to_string();
-    let out = git(&repo, &["log", "--follow", "--decorate=full", "-n", &n, LOG_FORMAT, "--", &path])?;
+    let out = git(
+        &repo,
+        &[
+            "log",
+            "--follow",
+            "--decorate=full",
+            "-n",
+            &n,
+            LOG_FORMAT,
+            "--",
+            &path,
+        ],
+    )?;
     Ok(parse::parse_log(&out))
 }
 
@@ -806,7 +992,9 @@ pub fn rebase(repo: String, onto: String) -> Res<()> {
 /// Returns the commit it pointed to, so Ctrl+Z can bring it back.
 #[tauri::command(async)]
 pub fn delete_branch(repo: String, name: String, force: bool) -> Res<String> {
-    let hash = git(&repo, &["rev-parse", &format!("refs/heads/{name}")])?.trim().to_string();
+    let hash = git(&repo, &["rev-parse", &format!("refs/heads/{name}")])?
+        .trim()
+        .to_string();
     git(&repo, &["branch", if force { "-D" } else { "-d" }, &name])?;
     Ok(hash)
 }
@@ -988,9 +1176,15 @@ pub struct UserInfo {
 #[tauri::command(async)]
 pub fn user_info() -> Res<UserInfo> {
     let get = |key: &str| {
-        git(".", &["config", "--global", "--get", key]).ok().map(|v| v.trim().to_string()).filter(|v| !v.is_empty())
+        git(".", &["config", "--global", "--get", key])
+            .ok()
+            .map(|v| v.trim().to_string())
+            .filter(|v| !v.is_empty())
     };
-    Ok(UserInfo { name: get("user.name"), email: get("user.email") })
+    Ok(UserInfo {
+        name: get("user.name"),
+        email: get("user.email"),
+    })
 }
 
 #[derive(Serialize)]
@@ -1024,23 +1218,42 @@ pub fn repo_summary(repo: String, email: Option<String>) -> Res<RepoSummary> {
     let st = status(info.path.clone())?;
     let tr = tracking(info.path.clone())?;
 
-    let last = git(&info.path, &["log", "-1", &format!("--format=%s{FS}%an{FS}%at")]).unwrap_or_default();
+    let last = git(
+        &info.path,
+        &["log", "-1", &format!("--format=%s{FS}%an{FS}%at")],
+    )
+    .unwrap_or_default();
     let mut f = last.trim().split(FS);
     let last_commit = match (f.next(), f.next(), f.next()) {
-        (Some(s), Some(a), Some(t)) if !s.is_empty() => {
-            Some(LastCommit { subject: s.into(), author: a.into(), timestamp: t.parse().unwrap_or(0) })
-        }
+        (Some(s), Some(a), Some(t)) if !s.is_empty() => Some(LastCommit {
+            subject: s.into(),
+            author: a.into(),
+            timestamp: t.parse().unwrap_or(0),
+        }),
         _ => None,
     };
     // an empty repo has no HEAD: count is 0
-    let total_commits = git(&info.path, &["rev-list", "--all", "--count"]).ok().and_then(|n| n.trim().parse().ok()).unwrap_or(0);
+    let total_commits = git(&info.path, &["rev-list", "--all", "--count"])
+        .ok()
+        .and_then(|n| n.trim().parse().ok())
+        .unwrap_or(0);
 
     let my_commits = match email.as_deref().filter(|e| !e.is_empty()) {
-        Some(e) => git(&info.path, &["log", "--all", "--since=1.year", "--fixed-strings", &format!("--author={e}"), "--format=%at"])
-            .unwrap_or_default()
-            .lines()
-            .filter_map(|t| t.parse().ok())
-            .collect(),
+        Some(e) => git(
+            &info.path,
+            &[
+                "log",
+                "--all",
+                "--since=1.year",
+                "--fixed-strings",
+                &format!("--author={e}"),
+                "--format=%at",
+            ],
+        )
+        .unwrap_or_default()
+        .lines()
+        .filter_map(|t| t.parse().ok())
+        .collect(),
         None => vec![],
     };
 
@@ -1064,11 +1277,18 @@ pub fn repo_summary(repo: String, email: Option<String>) -> Res<RepoSummary> {
 #[tauri::command(async)]
 pub fn working_patch(repo: String) -> Res<String> {
     let has_head = git(&repo, &["rev-parse", "--verify", "--quiet", "HEAD"]).is_ok();
-    let mut patch = if has_head { git(&repo, &["diff", "HEAD", "--no-color"])? } else { String::new() };
+    let mut patch = if has_head {
+        git(&repo, &["diff", "HEAD", "--no-color"])?
+    } else {
+        String::new()
+    };
     let untracked = git(&repo, &["ls-files", "--others", "--exclude-standard", "-z"])?;
     for file in untracked.split('\0').filter(|f| !f.is_empty()) {
         // --no-index exits with 1 when the files differ, which is the case here
-        let out = run(&repo, &["diff", "--no-color", "--no-index", "--", "/dev/null", file])?;
+        let out = run(
+            &repo,
+            &["diff", "--no-color", "--no-index", "--", "/dev/null", file],
+        )?;
         patch.push_str(&String::from_utf8_lossy(&out.stdout));
     }
     if patch.trim().is_empty() {
@@ -1091,7 +1311,11 @@ pub struct Signing {
 
 /// Effective signing settings (`git config` merges global and repo values)
 fn read_signing(dir: &str, scope: &[&str]) -> Signing {
-    let get = |k: &str| git(dir, &[&["config"], scope, &["--get", k]].concat()).map(|v| v.trim().to_string()).unwrap_or_default();
+    let get = |k: &str| {
+        git(dir, &[&["config"], scope, &["--get", k]].concat())
+            .map(|v| v.trim().to_string())
+            .unwrap_or_default()
+    };
     Signing {
         enabled: get("commit.gpgsign") == "true",
         format: match get("gpg.format").as_str() {
@@ -1115,14 +1339,22 @@ fn write_signing(dir: &str, scope: &[&str], s: &Signing, allowed_file: &Path) ->
     set("gpg.format", &s.format)?;
     set("user.signingkey", s.key.trim())?;
     if s.format == "ssh" {
-        let public = std::fs::read_to_string(s.key.trim()).map_err(|e| format!("Chave {}: {e}", s.key.trim()))?;
+        let public = std::fs::read_to_string(s.key.trim())
+            .map_err(|e| format!("Chave {}: {e}", s.key.trim()))?;
         let email = git(dir, &["config", "--get", "user.email"]).unwrap_or_default();
         if let Some(parent) = allowed_file.parent() {
             std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
         }
         // format: "<email> <key type> <key>"
-        std::fs::write(allowed_file, format!("{} {}\n", email.trim(), public.trim())).map_err(|e| e.to_string())?;
-        set("gpg.ssh.allowedSignersFile", &allowed_file.to_string_lossy().replace('\\', "/"))?;
+        std::fs::write(
+            allowed_file,
+            format!("{} {}\n", email.trim(), public.trim()),
+        )
+        .map_err(|e| e.to_string())?;
+        set(
+            "gpg.ssh.allowedSignersFile",
+            &allowed_file.to_string_lossy().replace('\\', "/"),
+        )?;
     }
     Ok(())
 }
@@ -1134,13 +1366,20 @@ pub fn signing(repo: String) -> Res<Signing> {
 
 #[tauri::command(async)]
 pub fn set_signing(settings: Signing) -> Res<()> {
-    write_signing(".", &["--global"], &settings, &identity_dir()?.join("allowed_signers"))
+    write_signing(
+        ".",
+        &["--global"],
+        &settings,
+        &identity_dir()?.join("allowed_signers"),
+    )
 }
 
 /// Public SSH keys in ~/.ssh, to pick one for signing
 #[tauri::command(async)]
 pub fn ssh_keys() -> Res<Vec<String>> {
-    let home = std::env::var("USERPROFILE").or_else(|_| std::env::var("HOME")).map_err(|e| e.to_string())?;
+    let home = std::env::var("USERPROFILE")
+        .or_else(|_| std::env::var("HOME"))
+        .map_err(|e| e.to_string())?;
     let dir = Path::new(&home).join(".ssh");
     let mut keys: Vec<String> = std::fs::read_dir(dir)
         .map(|rd| {
@@ -1167,7 +1406,10 @@ pub struct SignatureInfo {
 pub fn commit_signature(repo: String, hash: String) -> Res<SignatureInfo> {
     let out = git(&repo, &["log", "-1", "--format=%G?%x1f%GS", &hash, "--"])?;
     let (status, signer) = out.trim().split_once(FS).unwrap_or((out.trim(), ""));
-    Ok(SignatureInfo { status: status.into(), signer: signer.into() })
+    Ok(SignatureInfo {
+        status: status.into(),
+        signer: signer.into(),
+    })
 }
 
 // ---------- Commit message suggested by AI (Claude Code CLI) ----------
@@ -1204,7 +1446,10 @@ fn commit_prompt(diff: &str, recent: &str) -> String {
 /// What the model answered, without code fences or quotes around it
 fn clean_message(out: &str) -> String {
     let t = out.trim();
-    let t = t.strip_prefix("```").map(|r| r.split_once('\n').map_or(r, |(_, rest)| rest)).unwrap_or(t);
+    let t = t
+        .strip_prefix("```")
+        .map(|r| r.split_once('\n').map_or(r, |(_, rest)| rest))
+        .unwrap_or(t);
     let t = t.strip_suffix("```").unwrap_or(t).trim();
     t.trim_matches('"').trim().to_string()
 }
@@ -1232,15 +1477,30 @@ pub fn suggest_commit_message(repo: String) -> Res<String> {
         cmd.creation_flags(0x0800_0000);
     }
     let mut child = cmd.spawn().map_err(|e| match e.kind() {
-        std::io::ErrorKind::NotFound => "Claude Code não encontrado. Instale (claude.com/code) e entre com `claude`.".to_string(),
+        std::io::ErrorKind::NotFound => {
+            "Claude Code não encontrado. Instale (claude.com/code) e entre com `claude`."
+                .to_string()
+        }
         _ => e.to_string(),
     })?;
-    child.stdin.take().unwrap().write_all(commit_prompt(&diff, &recent).as_bytes()).map_err(|e| e.to_string())?;
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(commit_prompt(&diff, &recent).as_bytes())
+        .map_err(|e| e.to_string())?;
     let out = child.wait_with_output().map_err(|e| e.to_string())?;
     let text = String::from_utf8_lossy(&out.stdout);
     if !out.status.success() || text.trim().is_empty() {
         let err = String::from_utf8_lossy(&out.stderr);
-        return Err(format!("Claude: {}", if err.trim().is_empty() { text.trim() } else { err.trim() }));
+        return Err(format!(
+            "Claude: {}",
+            if err.trim().is_empty() {
+                text.trim()
+            } else {
+                err.trim()
+            }
+        ));
     }
     Ok(clean_message(&text))
 }
@@ -1283,7 +1543,15 @@ fn identity_dir() -> Res<std::path::PathBuf> {
 /// `scope` is ["--global"] in the app and ["-f", file] in tests.
 fn read_identities(scope: &[&str], dir: &Path) -> Vec<Identity> {
     let dir = dir.to_string_lossy().replace('\\', "/");
-    let Ok(out) = git(".", &[&["config"], scope, &["--get-regexp", r"^includeif\..*\.path$"]].concat()) else {
+    let Ok(out) = git(
+        ".",
+        &[
+            &["config"],
+            scope,
+            &["--get-regexp", r"^includeif\..*\.path$"],
+        ]
+        .concat(),
+    ) else {
         return vec![];
     };
     out.lines()
@@ -1293,9 +1561,19 @@ fn read_identities(scope: &[&str], dir: &Path) -> Vec<Identity> {
             if !file.replace('\\', "/").starts_with(&dir) {
                 return None;
             }
-            let folder = key.strip_prefix("includeif.gitdir/i:")?.strip_suffix(".path")?;
-            let get = |k: &str| git(".", &["config", "-f", file, k]).map(|v| v.trim().to_string()).unwrap_or_default();
-            Some(Identity { folder: folder.into(), name: get("user.name"), email: get("user.email") })
+            let folder = key
+                .strip_prefix("includeif.gitdir/i:")?
+                .strip_suffix(".path")?;
+            let get = |k: &str| {
+                git(".", &["config", "-f", file, k])
+                    .map(|v| v.trim().to_string())
+                    .unwrap_or_default()
+            };
+            Some(Identity {
+                folder: folder.into(),
+                name: get("user.name"),
+                email: get("user.email"),
+            })
         })
         .collect()
 }
@@ -1304,7 +1582,10 @@ fn read_identities(scope: &[&str], dir: &Path) -> Vec<Identity> {
 fn write_identities(scope: &[&str], dir: &Path, list: &[Identity]) -> Res<()> {
     for old in read_identities(scope, dir) {
         let section = format!("includeIf.gitdir/i:{}", old.folder);
-        git(".", &[&["config"], scope, &["--remove-section", &section]].concat())?;
+        git(
+            ".",
+            &[&["config"], scope, &["--remove-section", &section]].concat(),
+        )?;
     }
     if let Ok(entries) = std::fs::read_dir(dir) {
         for e in entries.flatten() {
@@ -1325,9 +1606,19 @@ fn write_identities(scope: &[&str], dir: &Path, list: &[Identity]) -> Res<()> {
             .unwrap_or_else(|_| id.folder.trim().to_string())
             .replace('\\', "/");
         // trailing slash = every repository below the folder
-        let folder = if folder.ends_with('/') { folder } else { format!("{folder}/") };
-        let file = dir.join(format!("identity-{i}.gitconfig")).to_string_lossy().replace('\\', "/");
-        for (key, value) in [("user.name", id.name.trim()), ("user.email", id.email.trim())] {
+        let folder = if folder.ends_with('/') {
+            folder
+        } else {
+            format!("{folder}/")
+        };
+        let file = dir
+            .join(format!("identity-{i}.gitconfig"))
+            .to_string_lossy()
+            .replace('\\', "/");
+        for (key, value) in [
+            ("user.name", id.name.trim()),
+            ("user.email", id.email.trim()),
+        ] {
             if !value.is_empty() {
                 git(".", &["config", "-f", &file, key, value])?;
             }
@@ -1366,8 +1657,13 @@ fn spawn(program: &str, args: &[&str], dir: &str, console: bool) -> Res<()> {
         cmd.spawn().map(drop)
     };
     match start(program) {
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound && cfg!(windows) && !program.contains('.') => {
-            start(&format!("{program}.cmd")).map_err(|_| format!("{program} não encontrado. Ele está no PATH?"))
+        Err(e)
+            if e.kind() == std::io::ErrorKind::NotFound
+                && cfg!(windows)
+                && !program.contains('.') =>
+        {
+            start(&format!("{program}.cmd"))
+                .map_err(|_| format!("{program} não encontrado. Ele está no PATH?"))
         }
         r => r.map_err(|e| format!("Não foi possível abrir {program}: {e}")),
     }
@@ -1387,7 +1683,8 @@ pub fn open_terminal(repo: String, terminal: String) -> Res<()> {
         "wt" => spawn("wt", &["-d", &repo], &repo, false),
         "powershell" | "pwsh" | "cmd" => spawn(&terminal, &[], &repo, true),
         "git-bash" => {
-            let bash = std::env::var("ProgramFiles").unwrap_or_else(|_| r"C:\Program Files".into()) + r"\Git\git-bash.exe";
+            let bash = std::env::var("ProgramFiles").unwrap_or_else(|_| r"C:\Program Files".into())
+                + r"\Git\git-bash.exe";
             spawn(&bash, &[&format!("--cd={repo}")], &repo, false)
         }
         other => Err(format!("Terminal desconhecido: {other}")),
@@ -1450,7 +1747,13 @@ pub fn stash_files(repo: String, name: String) -> Res<Vec<FileChange>> {
 }
 
 #[tauri::command(async)]
-pub fn stash_diff(repo: String, name: String, file: String, context: u32, ignore_ws: bool) -> Res<Vec<DiffLine>> {
+pub fn stash_diff(
+    repo: String,
+    name: String,
+    file: String,
+    context: u32,
+    ignore_ws: bool,
+) -> Res<Vec<DiffLine>> {
     let opts = diff_opts(context, ignore_ws);
     let full = git(&repo, &with_opts(&STASH_SHOW, &opts, &["-p", &name]))?;
     Ok(parse::parse_diff(&parse::file_section(&full, &file)))
@@ -1468,7 +1771,15 @@ const DISCARDS: &str = "refs/will-repo/discards";
 fn backup(repo: &str, paths: &[&str]) -> Res<()> {
     let index = git(repo, &["rev-parse", "--git-path", "will-repo-backup-index"])?;
     let index = Path::new(repo).join(index.trim());
-    let with_index = |args: &[&str]| check(command(repo, args).env("GIT_INDEX_FILE", &index).output().map_err(|e| e.to_string())?, args);
+    let with_index = |args: &[&str]| {
+        check(
+            command(repo, args)
+                .env("GIT_INDEX_FILE", &index)
+                .output()
+                .map_err(|e| e.to_string())?,
+            args,
+        )
+    };
     let head = git(repo, &["rev-parse", "--verify", "--quiet", "HEAD"]).ok();
     let result = (|| {
         match &head {
@@ -1478,16 +1789,32 @@ fn backup(repo: &str, paths: &[&str]) -> Res<()> {
         // -A: a deleted file is recorded as absent
         with_index(&[&["add", "-A", "-f", "--"][..], paths].concat())?;
         let tree = with_index(&["write-tree"])?;
-        let message = format!("Descarte: {}
+        let message = format!(
+            "Descarte: {}
 
-{}", paths.join(", "), paths.join("
-"));
+{}",
+            paths.join(", "),
+            paths.join(
+                "
+"
+            )
+        );
         let mut args = vec!["commit-tree", tree.trim(), "-m", &message];
         if let Some(h) = &head {
             args.extend(["-p", h.trim()]);
         }
         let hash = git(repo, &args)?;
-        git(repo, &["update-ref", "--create-reflog", "-m", &message, DISCARDS, hash.trim()])
+        git(
+            repo,
+            &[
+                "update-ref",
+                "--create-reflog",
+                "-m",
+                &message,
+                DISCARDS,
+                hash.trim(),
+            ],
+        )
     })();
     let _ = std::fs::remove_file(&index);
     result.map(drop)
@@ -1505,7 +1832,10 @@ pub struct Discard {
 #[tauri::command(async)]
 pub fn discard_list(repo: String) -> Res<Vec<Discard>> {
     // no backup yet: the ref doesn't exist
-    let Ok(out) = git(&repo, &["log", "-g", "--format=%H%x1f%ct%x1f%b%x1e", DISCARDS, "--"]) else {
+    let Ok(out) = git(
+        &repo,
+        &["log", "-g", "--format=%H%x1f%ct%x1f%b%x1e", DISCARDS, "--"],
+    ) else {
         return Ok(vec![]);
     };
     Ok(out
@@ -1515,7 +1845,12 @@ pub fn discard_list(repo: String) -> Res<Vec<Discard>> {
             Some(Discard {
                 hash: f.next().filter(|h| !h.is_empty())?.into(),
                 timestamp: f.next()?.parse().unwrap_or(0),
-                files: f.next()?.lines().filter(|l| !l.is_empty()).map(String::from).collect(),
+                files: f
+                    .next()?
+                    .lines()
+                    .filter(|l| !l.is_empty())
+                    .map(String::from)
+                    .collect(),
             })
         })
         .collect())
@@ -1531,12 +1866,20 @@ pub fn restore_discard(repo: String, hash: String) -> Res<()> {
         .files;
     // current edits of those files would be overwritten: back them up too
     let paths: Vec<&str> = files.iter().map(String::as_str).collect();
-    if !git(&repo, &[&["status", "--porcelain", "--"][..], &paths].concat())?.is_empty() {
+    if !git(
+        &repo,
+        &[&["status", "--porcelain", "--"][..], &paths].concat(),
+    )?
+    .is_empty()
+    {
         backup(&repo, &paths)?;
     }
     for file in &files {
         if git(&repo, &["cat-file", "-e", &format!("{hash}:{file}")]).is_ok() {
-            git(&repo, &["restore", "--source", &hash, "--worktree", "--", file])?;
+            git(
+                &repo,
+                &["restore", "--source", &hash, "--worktree", "--", file],
+            )?;
         } else {
             let _ = std::fs::remove_file(Path::new(&repo).join(file));
         }
@@ -1694,7 +2037,8 @@ mod tests {
             "pair.txt".into(),
             0,
             Some(vec![0, 2]),
-            HunkAction::Stage, 3
+            HunkAction::Stage,
+            3,
         )
         .unwrap();
         assert_eq!(git(&repo, &["show", ":pair.txt"]).unwrap(), "X\ny\n");
@@ -1704,7 +2048,8 @@ mod tests {
             "pair.txt".into(),
             0,
             Some(vec![0, 1]),
-            HunkAction::Unstage, 3
+            HunkAction::Unstage,
+            3,
         )
         .unwrap();
         assert_eq!(git(&repo, &["show", ":pair.txt"]).unwrap(), "x\ny\n");
@@ -1714,7 +2059,8 @@ mod tests {
             "pair.txt".into(),
             0,
             Some(vec![1, 3]),
-            HunkAction::Discard, 3
+            HunkAction::Discard,
+            3,
         )
         .unwrap();
         assert_eq!(
@@ -1862,8 +2208,12 @@ mod tests {
         // amend: message only, then with a staged file
         commit(r(), "base editado".into(), true).unwrap();
         assert_eq!(commit_message(r(), "HEAD".into()).unwrap(), "base editado");
-        std::fs::write(dir.join("g.txt"), "g
-").unwrap();
+        std::fs::write(
+            dir.join("g.txt"),
+            "g
+",
+        )
+        .unwrap();
         stage(r(), vec!["g.txt".into()]).unwrap();
         commit(r(), "base com g".into(), true).unwrap();
         assert_eq!(log(r(), 10, None, vec![]).unwrap().len(), 1);
@@ -1871,25 +2221,42 @@ mod tests {
 
         // cherry-pick a commit from feature onto main, then revert it
         git(&repo, &["switch", "-q", "-c", "feature"]).unwrap();
-        std::fs::write(dir.join("h.txt"), "h
-").unwrap();
+        std::fs::write(
+            dir.join("h.txt"),
+            "h
+",
+        )
+        .unwrap();
         git(&repo, &["add", "."]).unwrap();
         git(&repo, &["commit", "-q", "-m", "add h"]).unwrap();
-        let h = git(&repo, &["rev-parse", "HEAD"]).unwrap().trim().to_string();
+        let h = git(&repo, &["rev-parse", "HEAD"])
+            .unwrap()
+            .trim()
+            .to_string();
         git(&repo, &["switch", "-q", "main"]).unwrap();
         pick(r(), h.clone(), false).unwrap();
         assert!(dir.join("h.txt").exists());
         pick(r(), "HEAD".into(), true).unwrap();
         assert!(!dir.join("h.txt").exists());
-        assert!(commit_message(r(), "HEAD".into()).unwrap().starts_with("Revert \"add h\""));
+        assert!(commit_message(r(), "HEAD".into())
+            .unwrap()
+            .starts_with("Revert \"add h\""));
 
         // conflicting cherry-pick stays in progress until aborted
-        std::fs::write(dir.join("f.txt"), "main
-").unwrap();
+        std::fs::write(
+            dir.join("f.txt"),
+            "main
+",
+        )
+        .unwrap();
         git(&repo, &["commit", "-q", "-am", "main f"]).unwrap();
         git(&repo, &["switch", "-q", "feature"]).unwrap();
-        std::fs::write(dir.join("f.txt"), "feature
-").unwrap();
+        std::fs::write(
+            dir.join("f.txt"),
+            "feature
+",
+        )
+        .unwrap();
         git(&repo, &["commit", "-q", "-am", "feature f"]).unwrap();
         git(&repo, &["switch", "-q", "main"]).unwrap();
         assert!(pick(r(), "feature".into(), false).is_err());
@@ -1898,10 +2265,26 @@ mod tests {
         assert_eq!(repo_state(r()).unwrap().kind, None);
 
         // merge commit: picked with -m 1
-        git(&repo, &["merge", "-q", "--no-ff", "-X", "theirs", "-m", "merge feature", "feature"]).unwrap();
+        git(
+            &repo,
+            &[
+                "merge",
+                "-q",
+                "--no-ff",
+                "-X",
+                "theirs",
+                "-m",
+                "merge feature",
+                "feature",
+            ],
+        )
+        .unwrap();
         pick(r(), "HEAD".into(), true).unwrap();
-        assert_eq!(std::fs::read_to_string(dir.join("f.txt")).unwrap(), "main
-");
+        assert_eq!(
+            std::fs::read_to_string(dir.join("f.txt")).unwrap(),
+            "main
+"
+        );
 
         // tags: lightweight and annotated
         create_tag(r(), "v1".into(), h.clone(), "".into()).unwrap();
@@ -1953,7 +2336,10 @@ mod tests {
         apply_hunk(r(), "f.txt".into(), 0, None, HunkAction::Discard, 3).unwrap();
         assert_eq!(read("f.txt"), "base\n");
         let list = discard_list(r()).unwrap();
-        assert_eq!((list.len(), list[0].files.as_slice()), (2, &["f.txt".to_string()][..]));
+        assert_eq!(
+            (list.len(), list[0].files.as_slice()),
+            (2, &["f.txt".to_string()][..])
+        );
         restore_discard(r(), list[0].hash.clone()).unwrap();
         assert_eq!(read("f.txt"), "edited\n");
         // restoring over local edits backs them up first
@@ -1974,7 +2360,11 @@ mod tests {
         std::fs::write(dir.join("a.txt"), "a\n").unwrap();
         discard(repo.clone(), status(repo.clone()).unwrap().unstaged).unwrap();
         assert!(!dir.join("a.txt").exists());
-        restore_discard(repo.clone(), discard_list(repo.clone()).unwrap()[0].hash.clone()).unwrap();
+        restore_discard(
+            repo.clone(),
+            discard_list(repo.clone()).unwrap()[0].hash.clone(),
+        )
+        .unwrap();
         assert!(dir.join("a.txt").exists());
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -1988,16 +2378,26 @@ mod tests {
         let ids_dir = dir.join("ids");
         std::fs::write(&cfg, "[user]\n\tname = Global\n").unwrap();
 
-        let work = Identity { folder: repo.clone(), name: "Will Trabalho".into(), email: "will@empresa.com".into() };
+        let work = Identity {
+            folder: repo.clone(),
+            name: "Will Trabalho".into(),
+            email: "will@empresa.com".into(),
+        };
         write_identities(&scope, &ids_dir, &[work.clone()]).unwrap();
         let read = read_identities(&scope, &ids_dir);
         assert_eq!(read.len(), 1);
-        assert_eq!((read[0].name.as_str(), read[0].email.as_str()), ("Will Trabalho", "will@empresa.com"));
+        assert_eq!(
+            (read[0].name.as_str(), read[0].email.as_str()),
+            ("Will Trabalho", "will@empresa.com")
+        );
         assert!(read[0].folder.ends_with('/'));
 
         // git really uses it inside the folder (GIT_CONFIG_GLOBAL = our test file)
         let email = |path: &str| {
-            let out = command(path, &["config", "user.email"]).env("GIT_CONFIG_GLOBAL", &cfg).output().unwrap();
+            let out = command(path, &["config", "user.email"])
+                .env("GIT_CONFIG_GLOBAL", &cfg)
+                .output()
+                .unwrap();
             String::from_utf8_lossy(&out.stdout).trim().to_string()
         };
         // the repo's own config wins over includes, so drop the one temp_repo set
@@ -2023,14 +2423,28 @@ mod tests {
         edited[4] = "line  5".into(); // whitespace only
         std::fs::write(dir.join("f.txt"), edited.join("\n") + "\n").unwrap();
 
-        let ctx = |n| working_diff(r(), "f.txt".into(), false, false, n).unwrap().iter().filter(|l| l.kind == parse::DiffKind::Ctx).count();
+        let ctx = |n| {
+            working_diff(r(), "f.txt".into(), false, false, n)
+                .unwrap()
+                .iter()
+                .filter(|l| l.kind == parse::DiffKind::Ctx)
+                .count()
+        };
         assert_eq!((ctx(1), ctx(3)), (2, 6));
         // hunks still apply with a smaller context
         apply_hunk(r(), "f.txt".into(), 0, None, HunkAction::Stage, 1).unwrap();
         git(&repo, &["commit", "-qm", "ws"]).unwrap();
-        let head = git(&repo, &["rev-parse", "HEAD"]).unwrap().trim().to_string();
-        assert!(!commit_diff(r(), head.clone(), "f.txt".into(), 3, false).unwrap().is_empty());
-        assert!(commit_diff(r(), head, "f.txt".into(), 3, true).unwrap().iter().all(|l| l.kind != parse::DiffKind::Add));
+        let head = git(&repo, &["rev-parse", "HEAD"])
+            .unwrap()
+            .trim()
+            .to_string();
+        assert!(!commit_diff(r(), head.clone(), "f.txt".into(), 3, false)
+            .unwrap()
+            .is_empty());
+        assert!(commit_diff(r(), head, "f.txt".into(), 3, true)
+            .unwrap()
+            .iter()
+            .all(|l| l.kind != parse::DiffKind::Add));
 
         // no upstream: every mode fails with git's message, none hangs
         for mode in ["ff-only", "rebase", "merge"] {
@@ -2097,19 +2511,51 @@ mod tests {
         git(&repo, &["add", "."]).unwrap();
         git(&repo, &["commit", "-qm", "add a"]).unwrap();
         std::fs::write(dir.join("src/a.txt"), "one\nTWO\n").unwrap();
-        git(&repo, &["-c", "user.name=Ana", "-c", "user.email=ana@x", "commit", "-qam", "change a"]).unwrap();
+        git(
+            &repo,
+            &[
+                "-c",
+                "user.name=Ana",
+                "-c",
+                "user.email=ana@x",
+                "commit",
+                "-qam",
+                "change a",
+            ],
+        )
+        .unwrap();
 
-        assert_eq!(tree(r(), "HEAD".into()).unwrap(), vec!["f.txt", "src/a.txt"]);
+        assert_eq!(
+            tree(r(), "HEAD".into()).unwrap(),
+            vec!["f.txt", "src/a.txt"]
+        );
         assert_eq!(tree(r(), "HEAD~2".into()).unwrap(), vec!["f.txt"]);
 
-        let hist: Vec<_> = file_history(r(), "src/a.txt".into(), 50).unwrap().into_iter().map(|c| c.subject).collect();
+        let hist: Vec<_> = file_history(r(), "src/a.txt".into(), 50)
+            .unwrap()
+            .into_iter()
+            .map(|c| c.subject)
+            .collect();
         assert_eq!(hist, vec!["change a", "add a"]);
 
         let b = blame(r(), "HEAD".into(), "src/a.txt".into()).unwrap();
-        assert_eq!((b[0].text.as_str(), b[0].summary.as_str()), ("one", "add a"));
-        assert_eq!((b[1].text.as_str(), b[1].author.as_str(), b[1].email.as_str()), ("TWO", "Ana", "ana@x"));
+        assert_eq!(
+            (b[0].text.as_str(), b[0].summary.as_str()),
+            ("one", "add a")
+        );
+        assert_eq!(
+            (
+                b[1].text.as_str(),
+                b[1].author.as_str(),
+                b[1].email.as_str()
+            ),
+            ("TWO", "Ana", "ana@x")
+        );
         // blame of an older version
-        assert_eq!(blame(r(), "HEAD~1".into(), "src/a.txt".into()).unwrap()[1].text, "two");
+        assert_eq!(
+            blame(r(), "HEAD~1".into(), "src/a.txt".into()).unwrap()[1].text,
+            "two"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -2117,7 +2563,12 @@ mod tests {
     fn undo_and_time_machine() {
         let (dir, repo) = temp_repo("undo");
         let r = || repo.clone();
-        let head = || git(&repo, &["rev-parse", "HEAD"]).unwrap().trim().to_string();
+        let head = || {
+            git(&repo, &["rev-parse", "HEAD"])
+                .unwrap()
+                .trim()
+                .to_string()
+        };
         let base = head();
 
         // undo a commit: gone, changes staged
@@ -2133,7 +2584,10 @@ mod tests {
 
         // undo a checkout: back to the branch
         create_branch(r(), "feature".into(), true, None).unwrap();
-        assert_eq!(undo_preview(r()).unwrap().description, "Voltar para a branch main");
+        assert_eq!(
+            undo_preview(r()).unwrap().description,
+            "Voltar para a branch main"
+        );
         undo(r()).unwrap();
         assert_eq!(refs(r()).unwrap().head.as_deref(), Some("main"));
 
@@ -2145,8 +2599,16 @@ mod tests {
         // time machine: entries newest first, branch from an old position
         let entries = reflog(r(), 50).unwrap();
         assert_eq!(entries[0].action, "reset");
-        assert!(entries.iter().any(|e| e.action == "checkout" && e.message == "moving from main to feature"));
-        restore(r(), base.clone(), RestoreAction::Branch, Some("resgate".into())).unwrap();
+        assert!(entries
+            .iter()
+            .any(|e| e.action == "checkout" && e.message == "moving from main to feature"));
+        restore(
+            r(),
+            base.clone(),
+            RestoreAction::Branch,
+            Some("resgate".into()),
+        )
+        .unwrap();
         assert!(refs(r()).unwrap().branches.contains(&"resgate".to_string()));
         restore(r(), base.clone(), RestoreAction::Reset, None).unwrap();
         assert_eq!(head(), base);
@@ -2170,7 +2632,13 @@ mod tests {
         git(&repo, &["add", "."]).unwrap();
         git(&repo, &["commit", "-qm", "login"]).unwrap();
 
-        finish_branch(r(), "feature/login".into(), "main".into(), Some("v1.0".into())).unwrap();
+        finish_branch(
+            r(),
+            "feature/login".into(),
+            "main".into(),
+            Some("v1.0".into()),
+        )
+        .unwrap();
         let rf = refs(r()).unwrap();
         assert_eq!(rf.head.as_deref(), Some("main"));
         assert!(!rf.branches.contains(&"feature/login".to_string()));
@@ -2188,12 +2656,27 @@ mod tests {
         let (lib_dir, lib) = temp_repo("struct-lib");
 
         // submodule from a local folder (file:// needs to be allowed explicitly)
-        git(&repo, &["-c", "protocol.file.allow=always", "submodule", "add", "-q", &lib, "libs/lib"]).unwrap();
+        git(
+            &repo,
+            &[
+                "-c",
+                "protocol.file.allow=always",
+                "submodule",
+                "add",
+                "-q",
+                &lib,
+                "libs/lib",
+            ],
+        )
+        .unwrap();
         git(&repo, &["commit", "-qm", "add submodule"]).unwrap();
         let subs = submodules(r()).unwrap();
         assert_eq!((subs[0].path.as_str(), subs[0].state), ("libs/lib", "ok"));
         assert!(subs[0].abs_path.ends_with("libs/lib"));
-        assert_eq!(parse_submodules(&repo, &format!("-{} x/y", "a".repeat(40)))[0].state, "uninitialized");
+        assert_eq!(
+            parse_submodules(&repo, &format!("-{} x/y", "a".repeat(40)))[0].state,
+            "uninitialized"
+        );
 
         // worktree with a new branch in a sibling folder, then remove it
         let wt = dir.with_file_name(format!("{}-wt", dir.file_name().unwrap().to_string_lossy()));
@@ -2227,13 +2710,18 @@ mod tests {
     #[test]
     fn clone_a_local_repository() {
         let (dir, repo) = temp_repo("clone-src");
-        let dest = dir.with_file_name(format!("{}-copia", dir.file_name().unwrap().to_string_lossy()));
+        let dest = dir.with_file_name(format!(
+            "{}-copia",
+            dir.file_name().unwrap().to_string_lossy()
+        ));
         let _ = std::fs::remove_dir_all(&dest);
         let info = clone_repo(repo.clone(), dest.to_string_lossy().into_owned()).unwrap();
         assert!(info.name.ends_with("-copia"));
         assert!(dest.join("f.txt").exists());
         // cloning again into the same folder is refused before running git
-        assert!(clone_repo(repo, dest.to_string_lossy().into_owned()).unwrap_err().contains("já existe"));
+        assert!(clone_repo(repo, dest.to_string_lossy().into_owned())
+            .unwrap_err()
+            .contains("já existe"));
         let _ = std::fs::remove_dir_all(&dest);
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -2241,7 +2729,11 @@ mod tests {
     #[test]
     fn commit_prompt_and_cleanup() {
         let p = commit_prompt("diff --git a b", "feat: x\nfix: y");
-        assert!(p.contains("Conventional Commits") && p.contains("fix: y") && p.ends_with("diff --git a b"));
+        assert!(
+            p.contains("Conventional Commits")
+                && p.contains("fix: y")
+                && p.ends_with("diff --git a b")
+        );
         // a huge diff is cut on a char boundary
         let big = "ç".repeat(MAX_DIFF);
         let (part, was_cut) = cut(&big, MAX_DIFF);
@@ -2268,13 +2760,20 @@ mod tests {
         let (dir, repo) = temp_repo("sign");
         let r = || repo.clone();
         let key = dir.join("chave");
-        let made = Command::new("ssh-keygen").args(["-q", "-t", "ed25519", "-N", "", "-C", "teste", "-f"]).arg(&key).output();
+        let made = Command::new("ssh-keygen")
+            .args(["-q", "-t", "ed25519", "-N", "", "-C", "teste", "-f"])
+            .arg(&key)
+            .output();
         if !made.is_ok_and(|o| o.status.success()) {
             eprintln!("ssh-keygen indisponível, teste pulado");
             return;
         }
         let pubkey = format!("{}.pub", key.to_string_lossy().replace('\\', "/"));
-        let s = Signing { enabled: true, format: "ssh".into(), key: pubkey.clone() };
+        let s = Signing {
+            enabled: true,
+            format: "ssh".into(),
+            key: pubkey.clone(),
+        };
         // repo-local config in the test, --global in the app
         write_signing(&repo, &["--local"], &s, &dir.join("allowed_signers")).unwrap();
         assert_eq!(read_signing(&repo, &["--local"]), s);
@@ -2285,7 +2784,16 @@ mod tests {
         assert_eq!(sig.status, "G", "{sig:?}");
         assert_eq!(commit_signature(r(), "HEAD~1".into()).unwrap().status, "N");
 
-        write_signing(&repo, &["--local"], &Signing { enabled: false, ..s }, &dir.join("allowed_signers")).unwrap();
+        write_signing(
+            &repo,
+            &["--local"],
+            &Signing {
+                enabled: false,
+                ..s
+            },
+            &dir.join("allowed_signers"),
+        )
+        .unwrap();
         assert!(!read_signing(&repo, &["--local"]).enabled);
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -2302,7 +2810,12 @@ mod tests {
         // the patch recreates the same changes on a clean copy
         let (dir2, repo2) = temp_repo("patch-dest");
         git_with_input(&repo2, &["apply", "-"], Some(&patch)).unwrap();
-        assert_eq!(std::fs::read_to_string(dir2.join("novo.txt")).unwrap().replace("\r\n", "\n"), "arquivo novo\n");
+        assert_eq!(
+            std::fs::read_to_string(dir2.join("novo.txt"))
+                .unwrap()
+                .replace("\r\n", "\n"),
+            "arquivo novo\n"
+        );
         let _ = std::fs::remove_dir_all(&dir);
         let _ = std::fs::remove_dir_all(&dir2);
     }
@@ -2312,10 +2825,16 @@ mod tests {
         let (dir, repo) = temp_repo("summary");
         std::fs::write(dir.join("g.txt"), "x\n").unwrap();
         let s = repo_summary(repo.clone(), Some("t@t".into())).unwrap();
-        assert_eq!((s.total_commits, s.changes, s.head.as_deref()), (1, 1, Some("main")));
+        assert_eq!(
+            (s.total_commits, s.changes, s.head.as_deref()),
+            (1, 1, Some("main"))
+        );
         assert_eq!(s.last_commit.unwrap().subject, "base");
         assert_eq!(s.my_commits.len(), 1);
-        assert!(repo_summary(repo.clone(), Some("ninguem@x".into())).unwrap().my_commits.is_empty());
+        assert!(repo_summary(repo.clone(), Some("ninguem@x".into()))
+            .unwrap()
+            .my_commits
+            .is_empty());
         assert!(user_info().is_ok());
         let _ = std::fs::remove_dir_all(&dir);
     }

@@ -66,18 +66,41 @@ fn take_utf8(pending: &mut Vec<u8>) -> String {
 /// shell starts: the first thing ConPTY sends is a cursor-position question that
 /// must be answered, and an event sent before the listener exists would be lost.
 #[tauri::command]
-pub fn pty_spawn(app: AppHandle, state: State<Terminals>, id: u32, cwd: String, shell_kind: String, cols: u16, rows: u16) -> Res<()> {
+pub fn pty_spawn(
+    app: AppHandle,
+    state: State<Terminals>,
+    id: u32,
+    cwd: String,
+    shell_kind: String,
+    cols: u16,
+    rows: u16,
+) -> Res<()> {
     let pair = native_pty_system()
-        .openpty(PtySize { rows, cols, pixel_width: 0, pixel_height: 0 })
+        .openpty(PtySize {
+            rows,
+            cols,
+            pixel_width: 0,
+            pixel_height: 0,
+        })
         .map_err(|e| e.to_string())?;
     let mut cmd = shell(&shell_kind);
     cmd.cwd(&cwd);
-    let child = pair.slave.spawn_command(cmd).map_err(|e| format!("Não foi possível abrir o terminal: {e}"))?;
+    let child = pair
+        .slave
+        .spawn_command(cmd)
+        .map_err(|e| format!("Não foi possível abrir o terminal: {e}"))?;
     drop(pair.slave); // the child keeps its own handle; ours would keep the pty open after exit
     let mut reader = pair.master.try_clone_reader().map_err(|e| e.to_string())?;
     let writer = pair.master.take_writer().map_err(|e| e.to_string())?;
 
-    state.sessions.lock().unwrap().insert(id, Session { writer, master: pair.master, child });
+    state.sessions.lock().unwrap().insert(
+        id,
+        Session {
+            writer,
+            master: pair.master,
+            child,
+        },
+    );
 
     // reader thread: shell output -> "pty-output" events, then "pty-exit"
     std::thread::spawn(move || {
@@ -102,14 +125,23 @@ pub fn pty_spawn(app: AppHandle, state: State<Terminals>, id: u32, cwd: String, 
 pub fn pty_write(state: State<Terminals>, id: u32, data: String) -> Res<()> {
     let mut sessions = state.sessions.lock().unwrap();
     let s = sessions.get_mut(&id).ok_or("Terminal fechado")?;
-    s.writer.write_all(data.as_bytes()).map_err(|e| e.to_string())
+    s.writer
+        .write_all(data.as_bytes())
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 pub fn pty_resize(state: State<Terminals>, id: u32, cols: u16, rows: u16) -> Res<()> {
     let sessions = state.sessions.lock().unwrap();
     let s = sessions.get(&id).ok_or("Terminal fechado")?;
-    s.master.resize(PtySize { rows, cols, pixel_width: 0, pixel_height: 0 }).map_err(|e| e.to_string())
+    s.master
+        .resize(PtySize {
+            rows,
+            cols,
+            pixel_width: 0,
+            pixel_height: 0,
+        })
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -139,7 +171,14 @@ mod tests {
     /// Real shell in a pty: runs a command and reads its output
     #[test]
     fn real_pty_runs_a_command() {
-        let pair = native_pty_system().openpty(PtySize { rows: 24, cols: 80, pixel_width: 0, pixel_height: 0 }).unwrap();
+        let pair = native_pty_system()
+            .openpty(PtySize {
+                rows: 24,
+                cols: 80,
+                pixel_width: 0,
+                pixel_height: 0,
+            })
+            .unwrap();
         let mut cmd = CommandBuilder::new("cmd.exe");
         cmd.args(["/C", "echo ola-pty"]);
         let _child = pair.slave.spawn_command(cmd).unwrap();
@@ -154,7 +193,11 @@ mod tests {
         std::thread::spawn(move || {
             let mut buf = [0u8; 4096];
             while let Ok(n) = reader.read(&mut buf) {
-                if n == 0 || tx.send(String::from_utf8_lossy(&buf[..n]).into_owned()).is_err() {
+                if n == 0
+                    || tx
+                        .send(String::from_utf8_lossy(&buf[..n]).into_owned())
+                        .is_err()
+                {
                     break;
                 }
             }

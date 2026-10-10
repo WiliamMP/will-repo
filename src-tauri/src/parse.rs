@@ -144,7 +144,11 @@ pub fn parse_blame(out: &str) -> Vec<BlameLine> {
         // header: "<40-hex hash> <orig line> <final line> [<lines in group>]"
         if key.len() == 40 && key.chars().all(|c| c.is_ascii_hexdigit()) {
             hash = key.to_string();
-            line = value.split(' ').nth(1).and_then(|n| n.parse().ok()).unwrap_or(0);
+            line = value
+                .split(' ')
+                .nth(1)
+                .and_then(|n| n.parse().ok())
+                .unwrap_or(0);
             known.entry(hash.clone()).or_default();
             continue;
         }
@@ -178,7 +182,10 @@ pub fn parse_stash_nodes(out: &str) -> Vec<Commit> {
                 author: f[2].to_string(),
                 email: f[3].to_string(),
                 timestamp: f[4].parse().unwrap_or(0),
-                refs: vec![RefLabel { name: f[5].to_string(), kind: RefKind::Stash }],
+                refs: vec![RefLabel {
+                    name: f[5].to_string(),
+                    kind: RefKind::Stash,
+                }],
                 subject: f[6].to_string(),
                 lane: 0,
                 stash: Some(f[5].to_string()),
@@ -191,7 +198,10 @@ pub fn parse_stash_nodes(out: &str) -> Vec<Commit> {
 pub fn insert_stashes(commits: &mut Vec<Commit>, stashes: Vec<Commit>) {
     // oldest first, so newer stashes of the same base end up on top
     for s in stashes.into_iter().rev() {
-        let base = s.parents.first().and_then(|p| commits.iter().position(|c| &c.hash == p));
+        let base = s
+            .parents
+            .first()
+            .and_then(|p| commits.iter().position(|c| &c.hash == p));
         let by_time = commits.iter().position(|c| c.timestamp < s.timestamp);
         let at = match (base, by_time) {
             (Some(b), Some(t)) => b.min(t),
@@ -834,10 +844,21 @@ mod tests {
         );
         let l = parse_blame(&out);
         assert_eq!(l.len(), 3);
-        assert_eq!((l[0].line, l[0].author.as_str(), l[0].email.as_str(), l[0].text.as_str()), (1, "Will", "w@x", "line one"));
+        assert_eq!(
+            (
+                l[0].line,
+                l[0].author.as_str(),
+                l[0].email.as_str(),
+                l[0].text.as_str()
+            ),
+            (1, "Will", "w@x", "line one")
+        );
         // second line of the same commit reuses its details
         assert_eq!((l[1].line, l[1].summary.as_str()), (2, "first"));
-        assert_eq!((l[2].hash.as_str(), l[2].author.as_str(), l[2].timestamp), (b.as_str(), "Ana", 200));
+        assert_eq!(
+            (l[2].hash.as_str(), l[2].author.as_str(), l[2].timestamp),
+            (b.as_str(), "Ana", 200)
+        );
     }
 
     #[test]
