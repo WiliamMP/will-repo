@@ -80,6 +80,7 @@ export function History({ repo, commits, selected, onSelect, hasMore, onLoadMore
         <div className="relative flex-1">
           <Search className="absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
           <Input
+            id="history-search"
             placeholder="Buscar por mensagem, autor ou hash..."
             className="h-7 pl-8"
             value={query}

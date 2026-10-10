@@ -55,6 +55,7 @@ const SHORTCUTS: { id: string; title: string; items: [string, string[]][] }[] = 
       ["Fechar aba", ["Ctrl", "W"]],
       ["Próxima aba", ["Ctrl", "Tab"]],
       ["Configurações", ["Ctrl", ","]],
+      ["Paleta de comandos", ["Ctrl", "K"]],
     ],
   },
   {

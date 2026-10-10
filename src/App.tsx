@@ -1,5 +1,25 @@
 import { useEffect, useMemo, useState } from "react";
-import { FolderGit2, GitFork, Plus, Settings as SettingsIcon, X } from "lucide-react";
+import {
+  Code2,
+  FolderGit2,
+  FolderOpen,
+  GitBranch,
+  GitCompareArrows,
+  GitFork,
+  Info,
+  Keyboard,
+  LayoutDashboard,
+  Monitor,
+  Moon,
+  Palette,
+  Plus,
+  Settings as SettingsIcon,
+  Sun,
+  UserRound,
+  UserRoundPen,
+  X,
+  XSquare,
+} from "lucide-react";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { toast } from "sonner";
@@ -8,11 +28,14 @@ import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Dashboard } from "@/components/Dashboard";
 import { RepoView } from "@/components/RepoView";
+import { CommandPalette } from "@/components/CommandPalette";
 import { SettingsDialog } from "@/components/Settings";
+import type { PageId } from "@/components/SettingsPages";
 import { dragWindow, WindowControls } from "@/components/WindowControls";
 import { useSettings } from "@/hooks/use-settings";
 import { splashDone } from "@/lib/splash";
 import { useTheme } from "@/hooks/use-theme";
+import { useCommands } from "@/lib/commands";
 import { git } from "@/lib/git";
 import { cn } from "@/lib/utils";
 
@@ -46,6 +69,12 @@ export default function App({ gitError }: { gitError: string | null }) {
   const [tabs, setTabs] = useState<Tabs>(() => load(TABS_KEY, { paths: [], active: null }));
   const [recent, setRecent] = useState<string[]>(() => load(RECENT_KEY, []));
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsPage, setSettingsPage] = useState<PageId>("appearance");
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const openSettings = (page: PageId = "appearance") => {
+    setSettingsPage(page);
+    setSettingsOpen(true);
+  };
   const { zoom } = useSettings();
 
   // Never stay behind the splash: if a view doesn't report ready in time, show the app anyway
@@ -96,12 +125,65 @@ export default function App({ gitError }: { gitError: string | null }) {
       return { paths, active };
     });
 
+  // Commands of the shell for the palette (Ctrl+K); RepoView adds the repository ones
+  useCommands("app", [
+    { id: "open", title: "Abrir repositório...", group: "Geral", icon: FolderOpen, shortcut: ["Ctrl", "O"], run: pickFolder },
+    {
+      id: "dashboard",
+      title: "Ir para o dashboard",
+      group: "Geral",
+      icon: LayoutDashboard,
+      keywords: "inicio home nova aba",
+      shortcut: ["Ctrl", "T"],
+      run: () => setTabs((t) => ({ ...t, active: null })),
+    },
+    ...(tabs.active
+      ? [{ id: "close-tab", title: "Fechar aba atual", group: "Geral", icon: XSquare, shortcut: ["Ctrl", "W"], run: () => close(tabs.active!) }]
+      : []),
+    ...tabs.paths
+      .filter((p) => p !== tabs.active)
+      .map((p) => ({
+        id: `tab:${p}`,
+        title: `Ir para ${baseName(p)}`,
+        group: "Abas",
+        icon: FolderGit2,
+        keywords: p,
+        run: () => setTabs((t) => ({ ...t, active: p })),
+      })),
+    ...recent
+      .filter((p) => !tabs.paths.includes(p))
+      .map((p) => ({ id: `recent:${p}`, title: `Abrir ${baseName(p)}`, group: "Recentes", icon: FolderGit2, keywords: p, run: () => openRepo(p) })),
+    { id: "theme-dark", title: "Tema escuro", group: "Aparência", icon: Moon, keywords: "dark", run: () => setTheme("dark") },
+    { id: "theme-light", title: "Tema claro", group: "Aparência", icon: Sun, keywords: "light", run: () => setTheme("light") },
+    { id: "theme-system", title: "Tema do sistema", group: "Aparência", icon: Monitor, run: () => setTheme("system") },
+    ...(
+      [
+        ["appearance", "Aparência", Palette],
+        ["account", "Conta e GitHub", UserRound],
+        ["identity", "Identidade (nome e email)", UserRoundPen],
+        ["git", "Git (fetch e pull)", GitBranch],
+        ["diff", "Diff", GitCompareArrows],
+        ["integrations", "Editor e terminal", Code2],
+        ["shortcuts", "Atalhos", Keyboard],
+        ["about", "Sobre", Info],
+      ] as const
+    ).map(([page, title, icon]) => ({
+      id: `settings:${page}`,
+      title: `Configurações: ${title}`,
+      group: "Configurações",
+      icon,
+      shortcut: page === "appearance" ? ["Ctrl", ","] : undefined,
+      run: () => openSettings(page),
+    })),
+  ]);
+
   // Ctrl+O open, Ctrl+T new tab, Ctrl+W close tab, Ctrl+Tab next tab, Ctrl+, settings
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!e.ctrlKey || e.shiftKey) return;
       const k = e.key.toLowerCase();
-      if (k === ",") setSettingsOpen(true);
+      if (k === ",") openSettings();
+      else if (k === "k") setPaletteOpen((o) => !o);
       else if (k === "o") pickFolder();
       else if (k === "t") setTabs((t) => ({ ...t, active: null }));
       else if (k === "w" && tabs.active) close(tabs.active);
@@ -177,7 +259,7 @@ export default function App({ gitError }: { gitError: string | null }) {
             className="mb-1 ml-1 shrink-0 self-center text-muted-foreground hover:text-primary"
             aria-label="Configurações"
             title="Configurações (Ctrl+,)"
-            onClick={() => setSettingsOpen(true)}
+            onClick={() => openSettings()}
           >
             <SettingsIcon />
           </Button>
@@ -186,7 +268,8 @@ export default function App({ gitError }: { gitError: string | null }) {
           <WindowControls />
         </nav>
 
-        <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} ctx={{ theme, setTheme }} />
+        <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} page={settingsPage} ctx={{ theme, setTheme }} />
+        <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
 
         {tabs.active ? (
           // key = path: switching tabs mounts a fresh view with its own state

@@ -14,10 +14,18 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
-type Props = { onStash: (message: string, untracked: boolean) => Promise<boolean>; disabled?: boolean };
+type Props = {
+  onStash: (message: string, untracked: boolean) => Promise<boolean>;
+  disabled?: boolean;
+  /** optional: opened from outside (command palette) */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+};
 
-export function StashDialog({ onStash, disabled }: Props) {
-  const [open, setOpen] = useState(false);
+export function StashDialog({ onStash, disabled, ...controlled }: Props) {
+  const [inner, setInner] = useState(false);
+  const open = controlled.open ?? inner;
+  const setOpen = controlled.onOpenChange ?? setInner;
   const [message, setMessage] = useState("");
   const [untracked, setUntracked] = useState(true);
 

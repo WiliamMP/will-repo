@@ -16,7 +16,6 @@ Lista de próximas funcionalidades do will-repo. Tamanho estimado entre parênte
 
 ## Conforto
 
-- [ ] **Paleta de comandos (Ctrl+K)** para executar qualquer ação pelo teclado. (médio)
 - [ ] **Virtualizar o diff** para arquivos muito grandes (hoje marcado com `ponytail:` em `DiffView.tsx`). (pequeno)
 
 ## Distribuição
@@ -87,3 +86,4 @@ Recursos inspirados no Sourcetree, no GitKraken e no Fork, repensados para o est
 - [x] Fetch automático a cada 5 minutos, com aviso e botão de Pull quando chegam commits novos
 - [x] Tela de configurações no estilo do Discord: conta, identidade (global e por pasta), aparência (tema, zoom), git (fetch automático, modo do pull), diff (contexto, espaços), integrações (editor, terminal), atalhos e sobre
 - [x] Splash screen enquanto o app carrega; ícone próprio (fonte em `src-tauri/icons/icon.svg`, gere os tamanhos com `npx tauri icon`); instaladores com `npm run tauri build` (NSIS em português e MSI em `src-tauri/target/release/bundle/`)
+- [x] Paleta de comandos (Ctrl+K): abas, recentes, tema, configurações, fetch/pull/push, branches, painéis e operações

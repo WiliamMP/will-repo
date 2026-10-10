@@ -2,7 +2,14 @@ import { useEffect, useRef, useState } from "react";
 import type { LucideIcon } from "lucide-react";
 import {
   AlertTriangle,
+  Cloud,
   Code2,
+  FileText,
+  GitCommitHorizontal,
+  GitMerge,
+  GitPullRequest,
+  LogIn,
+  Search,
   SquareTerminal,
   Archive,
   ArchiveRestore,
@@ -38,6 +45,7 @@ import { TagDialog } from "@/components/TagDialog";
 import { WorkingTree } from "@/components/WorkingTree";
 import { useRepo, type RepoApi } from "@/hooks/use-repo";
 import { useSettings } from "@/hooks/use-settings";
+import { useCommands, type Command } from "@/lib/commands";
 import { splashDone, splashStep } from "@/lib/splash";
 import { git, openInEditor, type Commit, type OpAction } from "@/lib/git";
 
@@ -53,6 +61,8 @@ export function RepoView({ path }: { path: string }) {
   const [tab, setTab] = useState("details");
   const [tagTarget, setTagTarget] = useState<Commit | null>(null);
   const [github, setGithub] = useState<string | null>(null);
+  const [branchOpen, setBranchOpen] = useState(false);
+  const [stashOpen, setStashOpen] = useState(false);
   useEffect(() => {
     git.githubUrl(path).then(setGithub, () => setGithub(null));
   }, [path]);
@@ -183,6 +193,45 @@ export function RepoView({ path }: { path: string }) {
     }
   };
 
+  // Commands of this repository for the palette (Ctrl+K)
+  const opKind = data?.state.kind;
+  const repoCommands: Command[] = !data
+    ? []
+    : [
+        { id: "fetch", title: "Fetch", group: "Repositório", icon: RefreshCw, shortcut: ["Ctrl", "Shift", "F"], run: fetch },
+        { id: "pull", title: "Pull", group: "Repositório", icon: ArrowDownToLine, shortcut: ["Ctrl", "Shift", "L"], run: pull },
+        { id: "push", title: "Push", group: "Repositório", icon: ArrowUpFromLine, shortcut: ["Ctrl", "Shift", "P"], run: push },
+        { id: "reload", title: "Atualizar", group: "Repositório", icon: RefreshCw, keywords: "recarregar refresh", shortcut: ["F5"], run: reload },
+        { id: "branch", title: "Nova branch...", group: "Repositório", icon: GitBranch, keywords: "criar", run: () => setBranchOpen(true) },
+        { id: "stash", title: "Guardar alterações (stash)...", group: "Repositório", icon: Archive, run: () => setStashOpen(true) },
+        { id: "search", title: "Buscar commits", group: "Repositório", icon: Search, keywords: "procurar histórico", run: () => document.getElementById("history-search")?.focus() },
+        { id: "editor", title: "Abrir no editor", group: "Repositório", icon: Code2, keywords: "vscode code", run: () => openInEditor(repo!.path, "") },
+        { id: "terminal", title: "Abrir terminal aqui", group: "Repositório", icon: SquareTerminal, run: () => git.openTerminal(repo!.path).catch((e) => toast.error(String(e))) },
+        { id: "tab-details", title: "Mostrar detalhes do commit", group: "Painel", icon: FileText, run: () => setTab("details") },
+        { id: "tab-changes", title: "Mostrar alterações (commit)", group: "Painel", icon: GitCommitHorizontal, keywords: "stage preparar", run: () => setTab("changes") },
+        { id: "tab-prs", title: "Mostrar pull requests", group: "Painel", icon: GitPullRequest, keywords: "pr github", run: () => setTab("prs") },
+        ...(opKind
+          ? [
+              { id: "op-continue", title: "Continuar operação em andamento", group: "Repositório", icon: Play, run: () => run(opKind, (p) => git.operation(p, "continue")) },
+              { id: "op-abort", title: "Abortar operação em andamento", group: "Repositório", icon: X, run: () => run(opKind, (p) => git.operation(p, "abort")) },
+            ]
+          : []),
+        ...data.refs.branches
+          .filter((b) => b !== head)
+          .flatMap((b) => [
+            { id: `co:${b}`, title: `Checkout ${b}`, group: "Branches", icon: LogIn, keywords: "trocar mudar", run: () => branchActions.checkout(b, false) },
+            { id: `merge:${b}`, title: `Mesclar ${b} em ${head}`, group: "Branches", icon: GitMerge, keywords: "merge", run: () => branchActions.merge(b) },
+          ]),
+        ...data.refs.remotes.map((b) => ({
+          id: `co-remote:${b}`,
+          title: `Checkout ${b}`,
+          group: "Branches remotas",
+          icon: Cloud,
+          run: () => branchActions.checkout(b, true),
+        })),
+      ];
+  useCommands("repo", repoCommands);
+
   if (error) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-2 text-muted-foreground">
@@ -216,10 +265,14 @@ export function RepoView({ path }: { path: string }) {
           <ToolbarButton icon={ArrowDownToLine} label="Pull" keys={["Ctrl", "Shift", "L"]} onClick={pull} busy={busy} id="pull" />
           <ToolbarButton icon={ArrowUpFromLine} label="Push" keys={["Ctrl", "Shift", "P"]} onClick={push} busy={busy} id="push" />
           <StashDialog
+            open={stashOpen}
+            onOpenChange={setStashOpen}
             disabled={!!busy || changes === 0}
             onStash={(message, untracked) => run("stash", (p) => git.stashPush(p, message, untracked), "Alterações guardadas")}
           />
           <BranchDialog
+            open={branchOpen}
+            onOpenChange={setBranchOpen}
             disabled={!!busy}
             onCreate={(name, checkout) => run("branch", (p) => git.createBranch(p, name, checkout), `Branch ${name} criada`)}
           />
