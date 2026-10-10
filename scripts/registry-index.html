@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Neon · registry shadcn</title>
+    <style>
+      :root { --bg: #0f1117; --card: #161923; --fg: #e6e8ef; --muted: #8b91a5; --primary: #7c5cff; --border: #252a38; }
+      * { box-sizing: border-box; }
+      body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 32px 16px; background: radial-gradient(600px circle at 50% 0%, rgb(124 92 255 / 0.18), transparent 70%), var(--bg); color: var(--fg); font: 15px/1.6 "Segoe UI", system-ui, sans-serif; }
+      main { width: min(680px, 100%); }
+      h1 { margin: 0 0 4px; font-size: 28px; }
+      h1 span { color: var(--primary); text-shadow: 0 0 18px rgb(124 92 255 / 0.7); }
+      p { color: var(--muted); margin: 0 0 20px; }
+      pre { margin: 0 0 12px; padding: 12px 14px; overflow-x: auto; background: var(--card); border: 1px solid var(--border); border-radius: 10px; font: 13px/1.5 Consolas, monospace; box-shadow: 0 0 30px -14px var(--primary); }
+      ul { padding-left: 18px; color: var(--muted); }
+      code, a { color: var(--fg); }
+      a { color: var(--primary); }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1><span>Neon</span> · registry shadcn</h1>
+      <p>Tema e componentes do <a href="https://github.com/WiliamMP/will-repo">will-repo</a>, gerados do próprio app.</p>
+      <pre>npx shadcn add https://wiliammp.github.io/will-repo/r/neon.json</pre>
+      <p>Ou só uma parte:</p>
+      <ul>
+        <li><code>r/neon-theme.json</code>: cores claro/escuro, fontes Geist, sucesso, aviso, diff e lanes</li>
+        <li><code>r/neon-border-beam.json</code>, <code>r/neon-shimmer-button.json</code>, <code>r/neon-animated-shiny-text.json</code>, <code>r/neon-dot-pattern.json</code></li>
+      </ul>
+    </main>
+  </body>
+</html>

@@ -19,7 +19,6 @@ Lista de próximas funcionalidades do will-repo. Tamanho estimado entre parênte
 
 ## Design system
 
-- [ ] **Publicar o registry Neon**: os arquivos já são gerados com `npm run registry` (em `registry-dist/`); falta hospedar num lugar público (repositório público ou GitHub Pages) para usar `npx shadcn add <url>/neon.json`. (trivial)
 
 ## Ideias das referências, com o toque do will-repo
 
@@ -75,3 +74,4 @@ Recursos inspirados no Sourcetree, no GitKraken e no Fork, repensados para o est
 - [x] Assinatura de commits (SSH ou GPG) com selo "Verificado"; compartilhar alterações como Gist secreto
 - [x] Registry shadcn "Neon" gerado do próprio tema (`npm run registry`): tema claro/escuro, cores extras e componentes Magic UI; testado instalando num projeto Vite novo
 - [x] Device Flow ativado (OAuth App "will-repo"); login pelo app também quando o gh CLI já está conectado
+- [x] Registry Neon publicado no GitHub Pages: `npx shadcn add https://wiliammp.github.io/will-repo/r/neon.json` (atualiza sozinho a cada push no tema)

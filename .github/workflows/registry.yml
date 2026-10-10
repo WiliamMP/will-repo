@@ -1,0 +1,62 @@
+# Publishes the "Neon" shadcn registry (theme + animated components) on GitHub Pages,
+# rebuilt from src/index.css on every push that touches the theme or the components.
+# Use in another app:  npx shadcn add https://wiliammp.github.io/will-repo/r/neon.json
+name: Registry
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - src/index.css
+      - src/components/ui/**
+      - scripts/build-registry.mjs
+      - .github/workflows/registry.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Build registry
+        env:
+          # where the items are served, so "neon" can point to the others
+          REGISTRY_URL: https://wiliammp.github.io/will-repo/r
+        run: npm run registry
+
+      - name: Site
+        run: |
+          mkdir -p site/r
+          cp registry-dist/*.json site/r/
+          cp scripts/registry-index.html site/index.html
+
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
