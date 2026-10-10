@@ -32,3 +32,6 @@ registry.json
 
 # e2e: downloaded msedgedriver and test results
 e2e/.bin/
+
+# Claude Code: personal overrides stay local (.claude/settings.json is shared)
+.claude/settings.local.json
