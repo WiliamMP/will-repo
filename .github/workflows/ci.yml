@@ -1,0 +1,47 @@
+# Checks every push and pull request: TypeScript + frontend build, then the Rust tests.
+# Windows runner, because the app (and tests like the integrated terminal) target Windows.
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+# a newer push cancels the run still going for the same branch
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Typecheck and build (tsc + vite)
+        run: npm run build
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      # the tests create real repositories; git needs an identity for commits
+      - name: Git identity
+        run: |
+          git config --global user.name "CI"
+          git config --global user.email "ci@example.com"
+          git config --global init.defaultBranch main
+
+      - name: Rust tests
+        working-directory: src-tauri
+        run: cargo test
