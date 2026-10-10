@@ -1,17 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
-import { FolderGit2, GitFork, Monitor, Moon, Plus, Settings as SettingsIcon, Sun, X } from "lucide-react";
+import { FolderGit2, GitFork, Plus, Settings as SettingsIcon, X } from "lucide-react";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Toaster } from "@/components/ui/sonner";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Dashboard } from "@/components/Dashboard";
 import { RepoView } from "@/components/RepoView";
 import { SettingsDialog } from "@/components/Settings";
+import { dragWindow, WindowControls } from "@/components/WindowControls";
 import { useSettings } from "@/hooks/use-settings";
-import { useTheme, type ThemeMode } from "@/hooks/use-theme";
+import { useTheme } from "@/hooks/use-theme";
 import { git } from "@/lib/git";
 import { cn } from "@/lib/utils";
 
@@ -111,7 +111,8 @@ export default function App() {
     <TooltipProvider delayDuration={300}>
       <Toaster theme={theme} position="bottom-right" richColors />
       <div className="flex h-full flex-col bg-background">
-        <nav className="flex h-10 shrink-0 items-end gap-1 border-b bg-sidebar px-2">
+        {/* Tab bar = title bar: empty areas drag the window (decorations are off in tauri.conf.json) */}
+        <nav onMouseDown={dragWindow} className="flex h-10 shrink-0 items-end gap-1 border-b bg-sidebar pl-2 select-none">
           <button
             aria-label="Dashboard"
             title="Dashboard"
@@ -160,33 +161,8 @@ export default function App() {
           >
             <Plus />
           </Button>
+          <div onMouseDown={dragWindow} className="min-w-6 flex-1 self-stretch" />
 
-          <ToggleGroup
-            type="single"
-            size="sm"
-            variant="outline"
-            className="mb-1 ml-auto self-center"
-            value={theme}
-            onValueChange={(v) => v && setTheme(v as ThemeMode)}
-          >
-            {(
-              [
-                ["system", Monitor, "Tema do sistema"],
-                ["dark", Moon, "Tema escuro"],
-                ["light", Sun, "Tema claro"],
-              ] as const
-            ).map(([value, Icon, label]) => (
-              <ToggleGroupItem
-                key={value}
-                value={value}
-                aria-label={label}
-                title={label}
-                className="data-[state=on]:bg-accent data-[state=on]:text-accent-foreground"
-              >
-                <Icon />
-              </ToggleGroupItem>
-            ))}
-          </ToggleGroup>
           <Button
             variant="ghost"
             size="icon-sm"
@@ -197,6 +173,9 @@ export default function App() {
           >
             <SettingsIcon />
           </Button>
+          {/* divider shorter than the bar: margin only above and below */}
+          <div className="my-2.5 ml-2 w-px self-stretch bg-border" />
+          <WindowControls />
         </nav>
 
         <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} ctx={{ theme, setTheme }} />

@@ -14,7 +14,10 @@
       {
         "title": "will-repo",
         "width": 1200,
-        "height": 760
+        "height": 760,
+        "decorations": false,
+        "minWidth": 900,
+        "minHeight": 560
       }
     ],
     "security": {
