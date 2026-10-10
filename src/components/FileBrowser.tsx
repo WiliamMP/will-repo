@@ -169,7 +169,7 @@ export function FileBrowser({ repo, target, onClose, onSelectCommit }: Props) {
 
 type Node = { name: string; path: string; children: Map<string, Node>; file: boolean };
 
-function buildTree(files: string[]): Node {
+export function buildTree(files: string[]): Node {
   const root: Node = { name: "", path: "", children: new Map(), file: false };
   for (const f of files) {
     let node = root;

@@ -29,6 +29,9 @@ jobs:
       - name: Typecheck and build (tsc + vite)
         run: npm run build
 
+      - name: Frontend tests (Vitest)
+        run: npm test
+
       - uses: dtolnay/rust-toolchain@stable
 
       - uses: Swatinem/rust-cache@v2

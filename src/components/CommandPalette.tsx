@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { CornerDownLeft, Search } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Kbd } from "@/components/ui/kbd";
@@ -21,12 +21,11 @@ export function CommandPalette({ open, onOpenChange }: Props) {
   }, [open]);
 
   // read the registry on every render: it always has the commands of what is on screen now
-  const results = useMemo(() => allCommands().filter((c) => matches(c, query)), [query, open]);
-  const groups = useMemo(() => {
-    const map = new Map<string, Command[]>();
-    for (const c of results) map.set(c.group, [...(map.get(c.group) ?? []), c]);
-    return [...map];
-  }, [results]);
+  // a few dozen items: filtering on every render is cheap and never shows a stale list
+  const results = allCommands().filter((c) => matches(c, query));
+  const byGroup = new Map<string, Command[]>();
+  for (const c of results) byGroup.set(c.group, [...(byGroup.get(c.group) ?? []), c]);
+  const groups = [...byGroup];
 
   useEffect(() => setIndex(0), [query]);
   // keep the highlighted item visible while moving with the arrows

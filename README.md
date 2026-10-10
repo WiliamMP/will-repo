@@ -52,6 +52,7 @@ Requisitos: [Node 22](https://nodejs.org), [Rust](https://rustup.rs) e git.
 ```bash
 npm ci
 npm run tauri dev      # app com recarga automática
+npm test               # testes da interface (Vitest + Testing Library)
 cd src-tauri && cargo test   # testes do backend (repositórios git reais em pastas temporárias)
 npm run build          # typecheck + build da interface
 ```

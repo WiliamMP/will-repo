@@ -551,9 +551,9 @@ export function Avatar({
 
 // ---------- Contribution heatmap ----------
 
-const dayKey = (d: Date) => `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+export const dayKey = (d: Date) => `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
 
-function countByDay(times: number[]) {
+export function countByDay(times: number[]) {
   const map = new Map<string, number>();
   for (const t of times) {
     const k = dayKey(new Date(t * 1000));
@@ -563,7 +563,7 @@ function countByDay(times: number[]) {
 }
 
 /** Days in a row with commits: ending today (or yesterday), and the longest in the year */
-function streaks(days: Map<string, number>) {
+export function streaks(days: Map<string, number>) {
   let longest = 0;
   let run = 0;
   const d = new Date();

@@ -75,3 +75,4 @@ Recursos inspirados no Sourcetree, no GitKraken e no Fork, repensados para o est
 - [x] Device Flow ativado (OAuth App "will-repo"); login pelo app também quando o gh CLI já está conectado
 - [x] Registry Neon publicado no GitHub Pages: `npx shadcn add https://wiliammp.github.io/will-repo/r/neon.json` (atualiza sozinho a cada push no tema)
 - [x] Auto-update pelos Releases do GitHub (instaladores assinados); release com `git tag vX.Y.Z && git push origin vX.Y.Z`
+- [x] Testes automatizados da interface com Vitest + Testing Library (`npm test`), também no CI

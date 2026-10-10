@@ -17,9 +17,9 @@ type Props = {
 type Selection = { hunk: number; lines: number[]; anchor: number } | null;
 
 /** A diff line with its hunk number and its position inside the hunk (-1 = the @@ line) */
-type Row = { l: DiffLine; hunk: number; body: number };
+export type Row = { l: DiffLine; hunk: number; body: number };
 /** Side-by-side row: old version on the left, new on the right, or a hunk header across */
-type SplitRow = { header: Row } | { left?: Row; right?: Row };
+export type SplitRow = { header: Row } | { left?: Row; right?: Row };
 
 const LINE = 20; // px, leading-5
 const HEADER = 28; // @@ rows are taller: they hold the stage/discard buttons
@@ -194,7 +194,7 @@ export function DiffView({ lines, hunkActions }: Props) {
 }
 
 /** Pairs each run of removed lines with the added lines that follow it */
-function toSplit(rows: Row[]): SplitRow[] {
+export function toSplit(rows: Row[]): SplitRow[] {
   const out: SplitRow[] = [];
   let dels: Row[] = [];
   let adds: Row[] = [];
