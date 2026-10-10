@@ -35,6 +35,7 @@ import { Related, Row, Section, StopSlider, type Page } from "@/components/Setti
 import { DEFAULTS, updateSettings, useSettings, type Settings } from "@/hooks/use-settings";
 import type { ThemeMode } from "@/hooks/use-theme";
 import { git, type Identity, type Signing } from "@/lib/git";
+import { checkForUpdate } from "@/lib/updater";
 import { cn } from "@/lib/utils";
 
 export type PageId = "account" | "identity" | "appearance" | "git" | "diff" | "integrations" | "shortcuts" | "about";
@@ -174,6 +175,7 @@ export const PAGES: Page[] = [
     group: "Sistema",
     sections: [
       { id: "version", title: "Versão" },
+      { id: "update", title: "Atualizações" },
       { id: "reset", title: "Restaurar" },
     ],
     keywords: "versão tauri restaurar padrão resetar",
@@ -870,6 +872,7 @@ function ShortcutsPage() {
 
 function AboutPage() {
   const [versions, setVersions] = useState<[string, string]>(["", ""]);
+  const [checking, setChecking] = useState(false);
   useEffect(() => {
     Promise.all([getVersion(), getTauriVersion()]).then(setVersions, () => {});
   }, []);
@@ -903,6 +906,17 @@ function AboutPage() {
             <Github /> Repositório
           </Button>
         </div>
+      </Section>
+      <Section id="update" title="Atualizações">
+        <Row label="Procurar atualizações" description="O app também procura sozinho alguns segundos depois de abrir. Versões novas vêm dos Releases do will-repo no GitHub, assinadas.">
+          <Button size="sm" variant="outline" disabled={checking} onClick={async () => {
+            setChecking(true);
+            await checkForUpdate(false);
+            setChecking(false);
+          }}>
+            {checking ? <Loader2 className="animate-spin" /> : <RefreshCw />} Procurar agora
+          </Button>
+        </Row>
       </Section>
       <Section id="reset" title="Restaurar">
         <Row label="Preferências padrão" description="Zoom, fetch, pull, diff, editor e terminal voltam ao original.">

@@ -9,6 +9,8 @@
   "permissions": [
     "core:default",
     "core:webview:allow-set-webview-zoom",
+    "updater:default",
+    "process:allow-restart",
     "core:window:allow-close",
     "core:window:allow-toggle-maximize",
     "core:window:allow-minimize",

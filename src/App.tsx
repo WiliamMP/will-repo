@@ -34,6 +34,7 @@ import type { PageId } from "@/components/SettingsPages";
 import { dragWindow, WindowControls } from "@/components/WindowControls";
 import { useSettings } from "@/hooks/use-settings";
 import { splashDone } from "@/lib/splash";
+import { checkForUpdate } from "@/lib/updater";
 import { useTheme } from "@/hooks/use-theme";
 import { useCommands } from "@/lib/commands";
 import { git } from "@/lib/git";
@@ -80,8 +81,13 @@ export default function App({ gitError }: { gitError: string | null }) {
   // Never stay behind the splash: if a view doesn't report ready in time, show the app anyway
   useEffect(() => {
     const t = setTimeout(splashDone, 10_000);
+    // a few seconds after opening, look for a new release (only in the installed app)
+    const u = import.meta.env.DEV ? undefined : setTimeout(() => checkForUpdate(true), 5000);
     if (gitError) toast.error("Git não encontrado. Instale em git-scm.com e abra o will-repo de novo.", { duration: Infinity });
-    return () => clearTimeout(t);
+    return () => {
+      clearTimeout(t);
+      clearTimeout(u);
+    };
   }, [gitError]);
 
   // Zoom of the whole webview (like Ctrl+ in a browser), so pixel sizes stay consistent
