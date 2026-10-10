@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { DiffView } from "@/components/DiffView";
+import { ImageDiff, isImage } from "@/components/ImageDiff";
 import { FileList } from "@/components/FileList";
 import { git, type Commit, type DiffLine, type FileChange, type Stash } from "@/lib/git";
 
@@ -50,6 +51,8 @@ export function CommitDetails({ repo, commit, github }: CommitProps) {
       id={commit.hash}
       loadFiles={() => git.commitFiles(repo, commit.hash)}
       loadDiff={(file) => git.commitDiff(repo, commit.hash, file)}
+      // merge commits compare with the first parent, like the text diff
+      loadImages={(file) => Promise.all([git.blob(repo, `${commit.hash}^`, file), git.blob(repo, commit.hash, file)])}
       header={
         <>
           <div className="flex items-center gap-1">
@@ -86,6 +89,7 @@ export function StashDetails({ repo, stash, actions }: { repo: string; stash: St
       id={stash.name + stash.timestamp}
       loadFiles={() => git.stashFiles(repo, stash.name)}
       loadDiff={(file) => git.stashDiff(repo, stash.name, file)}
+      loadImages={(file) => Promise.all([git.blob(repo, `${stash.name}^1`, file), git.blob(repo, stash.name, file)])}
       header={
         <>
           <code className="text-xs text-primary">{stash.name}</code>
@@ -104,10 +108,12 @@ type Props = {
   header: ReactNode;
   loadFiles: () => Promise<FileChange[]>;
   loadDiff: (file: string) => Promise<DiffLine[]>;
+  /** old and new bytes, for image files */
+  loadImages: (file: string) => Promise<[ArrayBuffer, ArrayBuffer]>;
 };
 
 // Shared layout: header, changed files, diff of the clicked file
-function ChangeDetails({ id, header, loadFiles, loadDiff }: Props) {
+function ChangeDetails({ id, header, loadFiles, loadDiff, loadImages }: Props) {
   const [files, setFiles] = useState<FileChange[]>([]);
   const [file, setFile] = useState<string | null>(null);
   const [diff, setDiff] = useState<DiffLine[] | null>(null);
@@ -131,7 +137,7 @@ function ChangeDetails({ id, header, loadFiles, loadDiff }: Props) {
 
   useEffect(() => {
     setDiff(null);
-    if (!file) return;
+    if (!file || isImage(file)) return; // images get ImageDiff instead of a text diff
     let stale = false;
     loadDiff(file).then((d) => !stale && setDiff(d), (e) => toast.error(String(e)));
     return () => {
@@ -145,7 +151,11 @@ function ChangeDetails({ id, header, loadFiles, loadDiff }: Props) {
       <ScrollArea className="max-h-[35%] shrink-0 border-b">
         <FileList files={files} selected={file ?? undefined} onSelect={(f) => setFile(f.path)} showStats />
       </ScrollArea>
-      <DiffView lines={diff} />
+      {file && isImage(file) ? (
+        <ImageDiff path={file} version={id} load={() => loadImages(file)} />
+      ) : (
+        <DiffView lines={diff} />
+      )}
     </>
   );
 }

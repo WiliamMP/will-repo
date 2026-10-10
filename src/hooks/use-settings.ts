@@ -9,6 +9,8 @@ export type Settings = {
   /** 0 = off */
   autoFetchMinutes: number;
   pullMode: "ff-only" | "rebase" | "merge";
+  /** diff layout: one column, or old and new side by side */
+  diffLayout: "unified" | "split";
   /** lines of context around each change (-U) */
   diffContext: number;
   /** history and stash diffs only; working tree diffs must apply back */
@@ -23,6 +25,7 @@ export const DEFAULTS: Settings = {
   showAvatars: true,
   autoFetchMinutes: 5,
   pullMode: "ff-only",
+  diffLayout: "unified",
   diffContext: 3,
   ignoreWhitespace: false,
   editor: "",

@@ -33,6 +33,7 @@ pub fn run() {
             git::commit_files,
             git::commit_diff,
             git::working_diff,
+            git::file_blob,
             git::stage,
             git::unstage,
             git::discard,

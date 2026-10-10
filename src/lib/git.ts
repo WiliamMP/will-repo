@@ -125,6 +125,8 @@ export const git = {
   commitFiles: (repo: string, hash: string) => invoke<FileChange[]>("commit_files", { repo, hash }),
   commitDiff: (repo: string, hash: string, file: string) =>
     invoke<DiffLine[]>("commit_diff", { repo, hash, file, ...readOnlyDiff() }),
+  /** raw bytes of a file version: a commit-ish, "INDEX" or "WORKTREE"; empty when it didn't exist */
+  blob: (repo: string, rev: string, path: string) => invoke<ArrayBuffer>("file_blob", { repo, rev, path }),
   workingDiff: (repo: string, file: FileChange, staged: boolean) =>
     invoke<DiffLine[]>("working_diff", {
       repo,

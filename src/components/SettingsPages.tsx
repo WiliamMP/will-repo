@@ -136,6 +136,7 @@ export const PAGES: Page[] = [
     group: "Experiência",
     sections: [
       { id: "context", title: "Contexto" },
+      { id: "layout", title: "Layout" },
       { id: "whitespace", title: "Espaços em branco" },
     ],
     keywords: "linhas contexto espaços branco whitespace comparação",
@@ -609,6 +610,20 @@ function DiffPage({ goTo }: SettingsContext) {
           ))}
         </div>
         <p className="mt-2 text-xs text-muted-foreground">Vale para todos os diffs. Muda ao abrir o próximo arquivo.</p>
+      </Section>
+
+      <Section id="layout" title="Layout">
+        <Row label="Mostrar o diff" description="Também dá para trocar pelo botão no topo de cada diff.">
+          <Select value={s.diffLayout} onValueChange={(v) => set("diffLayout")(v as Settings["diffLayout"])}>
+            <SelectTrigger className="w-40">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="unified">Unificado</SelectItem>
+              <SelectItem value="split">Lado a lado</SelectItem>
+            </SelectContent>
+          </Select>
+        </Row>
       </Section>
 
       <Section id="whitespace" title="Espaços em branco">

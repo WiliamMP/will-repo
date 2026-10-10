@@ -7,7 +7,6 @@ Lista de próximas funcionalidades do will-repo. Tamanho estimado entre parênte
 
 - [ ] **Rebase interativo**: reordenar, squash, editar mensagem e descartar commits arrastando na lista. (grande)
 - [ ] **Histórico e blame de um arquivo**: quem mudou cada linha e quando. (médio)
-- [ ] **Diff lado a lado**, além do diff unificado atual. (médio)
 
 ## Integração com GitHub
 
@@ -16,7 +15,6 @@ Lista de próximas funcionalidades do will-repo. Tamanho estimado entre parênte
 
 ## Conforto
 
-- [ ] **Virtualizar o diff** para arquivos muito grandes (hoje marcado com `ponytail:` em `DiffView.tsx`). (pequeno)
 
 ## Distribuição
 
@@ -44,7 +42,6 @@ Recursos inspirados no Sourcetree, no GitKraken e no Fork, repensados para o est
 
 ### Diff e conflitos
 
-- [ ] **Diff de imagens** [Fork]: comparação com slider (antes/depois) e modo sobreposição para PNG/JPG/SVG. (médio)
 - [ ] **Editor de conflito em 3 colunas** [Fork/GitKraken]: atual, recebida e resultado editável lado a lado, escolhendo linha por linha. Evolução da resolução por bloco que já existe. (grande)
 
 ### Commits
@@ -84,3 +81,4 @@ Recursos inspirados no Sourcetree, no GitKraken e no Fork, repensados para o est
 - [x] Splash screen enquanto o app carrega; ícone próprio (fonte em `src-tauri/icons/icon.svg`, gere os tamanhos com `npx tauri icon`); instaladores com `npm run tauri build` (NSIS em português e MSI em `src-tauri/target/release/bundle/`)
 - [x] Paleta de comandos (Ctrl+K): abas, recentes, tema, configurações, fetch/pull/push, branches, painéis e operações
 - [x] Grafo: avatares dos autores, stashes como nós, modo foco (isolar/esconder branches) com destaque do caminho do HEAD, minimapa
+- [x] Diff: virtualizado (só as linhas visíveis), modo lado a lado com seleção de linhas, diff de imagens (lado a lado, deslizar, sobrepor)

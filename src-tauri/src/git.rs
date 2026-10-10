@@ -266,6 +266,26 @@ pub fn working_diff(
     Ok(parse::parse_diff(&out))
 }
 
+/// Raw bytes of one version of a file, for the image diff.
+/// `rev`: a commit ("abc123", "abc123^", "stash@{0}^1"), "INDEX" (staged) or "WORKTREE" (on disk).
+/// Empty when the file doesn't exist in that version (added or deleted).
+/// `Response` sends the bytes as an ArrayBuffer, without JSON or base64.
+#[tauri::command(async)]
+pub fn file_blob(repo: String, rev: String, path: String) -> Res<tauri::ipc::Response> {
+    blob_bytes(&repo, &rev, &path).map(tauri::ipc::Response::new)
+}
+
+fn blob_bytes(repo: &str, rev: &str, path: &str) -> Res<Vec<u8>> {
+    Ok(match rev {
+        "WORKTREE" => std::fs::read(Path::new(repo).join(path)).unwrap_or_default(),
+        _ => {
+            let spec = if rev == "INDEX" { format!(":{path}") } else { format!("{rev}:{path}") };
+            let out = run(repo, &["show", &spec])?;
+            if out.status.success() { out.stdout } else { vec![] }
+        }
+    })
+}
+
 #[tauri::command(async)]
 pub fn stage(repo: String, files: Vec<String>) -> Res<()> {
     let args: Vec<&str> = ["add", "--"]
@@ -1520,6 +1540,24 @@ mod tests {
         let solo = log(r(), 100, Some("feature".into()), vec![]).unwrap();
         let subjects: Vec<_> = solo.iter().map(|c| c.subject.as_str()).collect();
         assert_eq!(subjects, vec!["on feature", "base"]);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn blob_versions_for_image_diff() {
+        let (dir, repo) = temp_repo("blob");
+        let png_v1 = [0x89u8, b'P', b'N', b'G', 0, 1, 2, 255];
+        std::fs::write(dir.join("img.png"), png_v1).unwrap();
+        git(&repo, &["add", "."]).unwrap();
+        git(&repo, &["commit", "-qm", "add image"]).unwrap();
+        std::fs::write(dir.join("img.png"), [0x89u8, b'P', b'N', b'G', 9]).unwrap();
+
+        // bytes come back untouched (no UTF-8 conversion)
+        assert_eq!(blob_bytes(&repo, "HEAD", "img.png").unwrap(), png_v1);
+        assert_eq!(blob_bytes(&repo, "INDEX", "img.png").unwrap(), png_v1);
+        assert_eq!(blob_bytes(&repo, "WORKTREE", "img.png").unwrap().len(), 5);
+        // before the commit the file didn't exist: empty, not an error
+        assert!(blob_bytes(&repo, "HEAD^", "img.png").unwrap().is_empty());
         let _ = std::fs::remove_dir_all(&dir);
     }
 

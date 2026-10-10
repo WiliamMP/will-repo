@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Check, ExternalLink, GitCommitHorizontal, Minus, Plus, Undo2 } from "lucide-react";
 import { ask } from "@tauri-apps/plugin-dialog";
 import { toast } from "sonner";
@@ -12,6 +12,7 @@ import { ShimmerButton } from "@/components/ui/shimmer-button";
 import { CommitAssist } from "@/components/CommitAssist";
 import { ConflictView, sideNames } from "@/components/ConflictView";
 import { DiffView } from "@/components/DiffView";
+import { ImageDiff, isImage } from "@/components/ImageDiff";
 import { DiscardsDialog } from "@/components/DiscardsDialog";
 import { FileList } from "@/components/FileList";
 import { git, openInEditor, type DiffLine, type FileChange, type HunkAction, type RepoState, type Status } from "@/lib/git";
@@ -35,6 +36,8 @@ export function WorkingTree({ repo, status, state, headPushed, recent, run }: Pr
   const [pick, setPick] = useState<{ file: FileChange; list: List } | null>(null);
   const [diff, setDiff] = useState<DiffLine[] | null>(null);
   const [message, setMessage] = useState("");
+  // changes on every status refresh, so the image diff reloads after stage/discard
+  const statusVersion = useMemo(() => Math.random().toString(36), [status]);
   const [amend, setAmend] = useState(false);
 
   // Reload the diff when the file is picked or the status changes (after stage, etc.)
@@ -185,11 +188,11 @@ export function WorkingTree({ repo, status, state, headPushed, recent, run }: Pr
           <DiscardsDialog repo={repo} onRestore={restore} />
           {status.unstaged.length > 0 && (
             <>
-              <Button variant="ghost" size="xs" onClick={() => discard(status.unstaged)}>
-                <Undo2 /> Descartar tudo
+              <Button variant="ghost" size="xs" title="Descartar todas as alterações não preparadas" onClick={() => discard(status.unstaged)}>
+                <Undo2 /> Descartar
               </Button>
-              <Button variant="ghost" size="xs" onClick={() => stage(status.unstaged)}>
-                <Plus /> Preparar tudo
+              <Button variant="ghost" size="xs" title="Preparar todos os arquivos" onClick={() => stage(status.unstaged)}>
+                <Plus /> Preparar
               </Button>
             </>
           )}
@@ -224,12 +227,27 @@ export function WorkingTree({ repo, status, state, headPushed, recent, run }: Pr
         <ConflictView repo={repo} file={pick.file.path} kind={state.kind} version={status} run={run} />
       ) : (
         <>
-          {pick && pick.file.status !== "?" && (
+          {pick && pick.file.status !== "?" && !isImage(pick.file.path) && (
             <p className="border-b bg-sidebar px-3 py-1 text-[11px] text-muted-foreground">
               Clique nas linhas +/- para escolher só algumas · Shift+clique seleciona um intervalo
             </p>
           )}
-          <DiffView lines={pick ? diff : null} hunkActions={pick && pick.file.status !== "?" ? hunkActions : undefined} />
+          {pick && isImage(pick.file.path) ? (
+            // staged: last commit -> index; not staged: index -> file on disk
+            <ImageDiff
+              path={pick.file.path}
+              version={`${pick.list}:${statusVersion}`}
+              load={() =>
+                Promise.all(
+                  pick.list === "staged"
+                    ? [git.blob(repo, "HEAD", pick.file.path), git.blob(repo, "INDEX", pick.file.path)]
+                    : [git.blob(repo, "INDEX", pick.file.path), git.blob(repo, "WORKTREE", pick.file.path)],
+                )
+              }
+            />
+          ) : (
+            <DiffView lines={pick ? diff : null} hunkActions={pick && pick.file.status !== "?" ? hunkActions : undefined} />
+          )}
         </>
       )}
 
@@ -279,7 +297,7 @@ export function WorkingTree({ repo, status, state, headPushed, recent, run }: Pr
 function ListHeader({ title, children }: { title: string; children?: React.ReactNode }) {
   return (
     <div className="flex h-8 items-center gap-1 px-3 pt-1 text-[11px] tracking-wider text-muted-foreground uppercase">
-      <span className="mr-auto">{title}</span>
+      <span className="mr-auto whitespace-nowrap">{title}</span>
       {children}
     </div>
   );
