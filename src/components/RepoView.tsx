@@ -31,6 +31,7 @@ import { TagDialog } from "@/components/TagDialog";
 import { TerminalPanel } from "@/components/TerminalPanel";
 import { TimeMachine } from "@/components/TimeMachine";
 import { WorkingTree } from "@/components/WorkingTree";
+import { FadeIn, TabPill } from "@/components/motion";
 import { DropMenu } from "@/components/repo/DropMenu";
 import { OperationBanner } from "@/components/repo/OperationBanner";
 import { RepoFooter } from "@/components/repo/RepoFooter";
@@ -254,8 +255,12 @@ export function RepoView({ path, onOpenRepo }: RepoViewProps) {
               <Tabs value={panels.tab} onValueChange={(t) => panels.setTab(t as RightTab)} className="flex h-full flex-col gap-0 bg-card">
                 <div className="border-b p-2">
                   <TabsList>
-                    <TabsTrigger value="details">Detalhes</TabsTrigger>
-                    <TabsTrigger value="changes" className="gap-1.5">
+                    <TabsTrigger value="details" className="data-active:bg-transparent data-active:shadow-none dark:data-active:border-transparent dark:data-active:bg-transparent isolate">
+                      {panels.tab === "details" && <TabPill group="repo-tabs" />}
+                      Detalhes
+                    </TabsTrigger>
+                    <TabsTrigger value="changes" className="data-active:bg-transparent data-active:shadow-none dark:data-active:border-transparent dark:data-active:bg-transparent isolate gap-1.5">
+                      {panels.tab === "changes" && <TabPill group="repo-tabs" />}
                       Alterações
                       {changes > 0 && (
                         <Badge variant={data.status.conflicted.length ? "destructive" : "default"} className="h-4 min-w-4 px-1 text-[10px]">
@@ -263,10 +268,14 @@ export function RepoView({ path, onOpenRepo }: RepoViewProps) {
                         </Badge>
                       )}
                     </TabsTrigger>
-                    <TabsTrigger value="prs">Pull Requests</TabsTrigger>
+                    <TabsTrigger value="prs" className="data-active:bg-transparent data-active:shadow-none dark:data-active:border-transparent dark:data-active:bg-transparent isolate">
+                      {panels.tab === "prs" && <TabPill group="repo-tabs" />}
+                      Pull Requests
+                    </TabsTrigger>
                   </TabsList>
                 </div>
                 <TabsContent value="details" className="flex min-h-0 flex-col">
+                  <FadeIn className="flex min-h-0 flex-1 flex-col">
                   {stash ? (
                     <StashDetails
                       repo={repo.path}
@@ -295,8 +304,10 @@ export function RepoView({ path, onOpenRepo }: RepoViewProps) {
                   ) : (
                     <p className="p-4 text-muted-foreground">Nenhum commit ainda.</p>
                   )}
+                  </FadeIn>
                 </TabsContent>
                 <TabsContent value="changes" className="flex min-h-0 flex-col">
+                  <FadeIn className="flex min-h-0 flex-1 flex-col">
                   <WorkingTree
                     repo={repo.path}
                     status={data.status}
@@ -306,9 +317,12 @@ export function RepoView({ path, onOpenRepo }: RepoViewProps) {
                     recent={[...new Set(commits.slice(0, 30).map((c) => c.subject))].slice(0, 8)}
                     run={run}
                   />
+                  </FadeIn>
                 </TabsContent>
                 <TabsContent value="prs" className="flex min-h-0 flex-col">
-                  <PullRequests repo={repo.path} head={data.refs.head} tracking={data.tracking} run={run} />
+                  <FadeIn className="flex min-h-0 flex-1 flex-col">
+                    <PullRequests repo={repo.path} head={data.refs.head} tracking={data.tracking} run={run} />
+                  </FadeIn>
                 </TabsContent>
               </Tabs>
             </ResizablePanel>

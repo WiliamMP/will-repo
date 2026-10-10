@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { CornerDownLeft, Search } from "lucide-react";
+import { motion } from "motion/react";
+import { enter, spring } from "@/components/motion";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Kbd } from "@/components/ui/kbd";
 import { allCommands, matches, type Command } from "@/lib/commands";
@@ -78,16 +80,25 @@ export function CommandPalette({ open, onOpenChange }: Props) {
                 const i = ++n;
                 const active = i === index;
                 return (
-                  <button
+                  <motion.button
                     key={c.id}
+                    {...enter(i)}
                     data-index={i}
                     onMouseMove={() => setIndex(i)}
                     onClick={() => run(c)}
                     className={cn(
-                      "flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm",
-                      active && "bg-accent text-accent-foreground shadow-[inset_2px_0_0_var(--primary)]",
+                      "relative isolate flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm",
+                      active && "text-accent-foreground",
                     )}
                   >
+                    {/* the highlight glides between items while moving with the arrows */}
+                    {active && (
+                      <motion.span
+                        layoutId="palette-active"
+                        transition={spring}
+                        className="absolute inset-0 -z-10 rounded-md bg-accent shadow-[inset_2px_0_0_var(--primary)]"
+                      />
+                    )}
                     <c.icon className={cn("size-4 shrink-0 text-muted-foreground", active && "text-primary")} />
                     <span className="flex-1 truncate">{c.title}</span>
                     {c.shortcut && (
@@ -98,7 +109,7 @@ export function CommandPalette({ open, onOpenChange }: Props) {
                       </span>
                     )}
                     {active && !c.shortcut && <CornerDownLeft className="size-3.5 text-muted-foreground" />}
-                  </button>
+                  </motion.button>
                 );
               })}
             </div>

@@ -42,6 +42,8 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { CloneDialog } from "@/components/CloneDialog";
+import { motion } from "motion/react";
+import { enter } from "@/components/motion";
 import { updateSettings, useSettings } from "@/hooks/use-settings";
 import { cn } from "@/lib/utils";
 
@@ -185,12 +187,13 @@ export function Dashboard({ repos, openTabs, onOpen, onPick, onForget }: Props) 
                   </p>
                 )}
                 <div className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-4">
-                  {list.map((c) => (
+                  {list.map((c, i) => (
                     <ContextMenu key={c.path}>
                       <ContextMenuTrigger asChild>
-                        <div>
+                        {/* cards come in one after the other; layout: moving between groups glides */}
+                        <motion.div layout {...enter(i)}>
                           <ProjectCard card={c} open={openTabs.includes(c.path)} onOpen={() => onOpen(c.path)} onForget={() => onForget(c.path)} />
-                        </div>
+                        </motion.div>
                       </ContextMenuTrigger>
                       <ContextMenuContent>
                         <ContextMenuSub>

@@ -4,6 +4,8 @@ import { useSyncExternalStore } from "react";
 export type Settings = {
   /** interface zoom: 0.9 .. 1.25 */
   zoom: number;
+  /** interface animations: full (follows Windows' setting), reduced (fades only) or off */
+  animations: "full" | "reduced" | "off";
   /** author photos in the history (GitHub / Gravatar) */
   showAvatars: boolean;
   /** 0 = off */
@@ -30,6 +32,7 @@ export type BranchTemplate = { prefix: string; base: string; tag: boolean };
 
 export const DEFAULTS: Settings = {
   zoom: 1,
+  animations: "full",
   showAvatars: true,
   autoFetchMinutes: 5,
   pullMode: "ff-only",

@@ -3,7 +3,9 @@ import type { LucideIcon } from "lucide-react";
 import { ChevronRight, Search, X } from "lucide-react";
 import { getVersion } from "@tauri-apps/api/app";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
+import { motion } from "motion/react";
 import { Input } from "@/components/ui/input";
+import { FadeIn } from "@/components/motion";
 import { Slider } from "@/components/ui/slider";
 import { Avatar, useGithub } from "@/components/Dashboard";
 import { PAGES, type PageId, type SettingsContext } from "@/components/SettingsPages";
@@ -144,11 +146,17 @@ export function SettingsDialog({ open, onOpenChange, page: initial = "appearance
                         <button
                           onClick={() => goTo(p.id)}
                           className={cn(
-                            "flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
-                            active &&
-                              "bg-sidebar-accent font-medium text-sidebar-accent-foreground shadow-[inset_2px_0_0_var(--primary)] hover:bg-sidebar-accent",
+                            "relative isolate flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
+                            active && "font-medium text-sidebar-accent-foreground hover:bg-transparent",
                           )}
                         >
+                          {/* the highlight slides from the previous page to this one */}
+                          {active && (
+                            <motion.span
+                              layoutId="settings-nav"
+                              className="absolute inset-0 -z-10 rounded-md bg-sidebar-accent shadow-[inset_2px_0_0_var(--primary)]"
+                            />
+                          )}
                           <p.icon className={cn("size-4 shrink-0", active && "text-primary")} />
                           {p.title}
                         </button>
@@ -160,10 +168,14 @@ export function SettingsDialog({ open, onOpenChange, page: initial = "appearance
                                 key={s.id}
                                 onClick={() => goTo(p.id, s.id)}
                                 className={cn(
-                                  "-ml-px border-l-2 border-transparent py-1 pl-4 text-left text-[13px] text-muted-foreground hover:text-foreground",
-                                  section === s.id && "border-primary text-foreground",
+                                  "relative -ml-px py-1 pl-4 text-left text-[13px] text-muted-foreground hover:text-foreground",
+                                  section === s.id && "text-foreground",
                                 )}
                               >
+                                {/* the bar follows the section in view while scrolling */}
+                                {section === s.id && (
+                                  <motion.span layoutId="settings-section" className="absolute inset-y-0.5 left-0 w-0.5 rounded-full bg-primary shadow-[0_0_6px_var(--glow)]" />
+                                )}
                                 {s.title}
                               </button>
                             ))}
@@ -194,7 +206,9 @@ export function SettingsDialog({ open, onOpenChange, page: initial = "appearance
             </button>
           </header>
           <div ref={scrollRef} onScroll={spy} className="min-h-0 flex-1 overflow-y-auto">
-            <div className="mx-auto flex max-w-2xl flex-col px-8 pt-8 pb-24">{page.render({ ...ctx, goTo })}</div>
+            <FadeIn key={pageId} className="mx-auto flex max-w-2xl flex-col px-8 pt-8 pb-24">
+              {page.render({ ...ctx, goTo })}
+            </FadeIn>
           </div>
         </section>
       </DialogContent>

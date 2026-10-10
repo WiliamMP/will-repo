@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { Archive, ChevronsDown, CirclePlus, FolderTree, Copy, Focus as FocusIcon, Loader2, Search, Tag, Undo2, X } from "lucide-react";
 import { toast } from "sonner";
@@ -65,6 +65,16 @@ export function History({ repo, commits, selected, onSelect, hasMore, onLoadMore
 
   const searching = results !== null;
   const rows = results ?? commits;
+
+  // Commits that just appeared at the top (a commit, pull, fetch) slide in; rows that
+  // only scrolled into view don't. The first load animates nothing.
+  const known = useRef<Set<string> | null>(null);
+  const fresh = useMemo(() => {
+    const prev = known.current;
+    known.current = new Set(commits.map((c) => c.hash));
+    if (!prev) return new Set<string>();
+    return new Set(commits.slice(0, 10).filter((c) => !prev.has(c.hash)).map((c) => c.hash));
+  }, [commits]);
   // Graph column grows with the number of lanes; no graph for search results
   const cols = { gridTemplateColumns: `${searching ? 12 : Math.max(72, graphWidth(commits))}px 1fr 120px 110px` };
 
@@ -158,6 +168,7 @@ export function History({ repo, commits, selected, onSelect, hasMore, onLoadMore
                     className={cn(
                       "absolute top-0 left-0 grid h-7 w-full cursor-pointer items-center gap-2 pr-5 hover:bg-muted/60",
                     c.stash && "italic text-muted-foreground",
+                    fresh.has(c.hash) && "animate-in fade-in slide-in-from-top-3 duration-500",
                     dropRow === c.hash && "bg-primary/20 ring-1 ring-primary ring-inset",
                       c.hash === selected && "bg-accent shadow-[inset_2px_0_0_var(--primary)] hover:bg-accent",
                     )}

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { LayoutGroup } from "motion/react";
 import { Check, ExternalLink, GitCommitHorizontal, Minus, Plus, Undo2, UserRoundSearch } from "lucide-react";
 import { ask } from "@tauri-apps/plugin-dialog";
 import { toast } from "sonner";
@@ -55,6 +56,13 @@ export function WorkingTree({ repo, status, state, headPushed, recent, onFileHis
       stale = true;
     };
   }, [repo, pick, status]);
+
+  // A file staged by parts is in both lists at once: it can't glide (same id twice)
+  const inBoth = useMemo(() => {
+    const staged = new Set(status.staged.map((f) => f.path));
+    return new Set(status.unstaged.filter((f) => staged.has(f.path)).map((f) => f.path));
+  }, [status]);
+  const glide = (f: FileChange) => (inBoth.has(f.path) ? undefined : `file:${f.path}`);
 
   const stage = (files: FileChange[]) => run("stage", (p) => git.stage(p, files.map((f) => f.path)));
   const unstage = (files: FileChange[]) => run("unstage", (p) => git.unstage(p, files.map((f) => f.path)));
@@ -158,6 +166,8 @@ export function WorkingTree({ repo, status, state, headPushed, recent, onFileHis
 
   return (
     <>
+      {/* one layout group: a file staged or unstaged glides from one list to the other */}
+      <LayoutGroup>
       <ScrollArea className="max-h-[45%] shrink-0 border-b">
         {status.conflicted.length > 0 && (
           <div className="border-b border-destructive/30 bg-destructive/5">
@@ -205,6 +215,7 @@ export function WorkingTree({ repo, status, state, headPushed, recent, onFileHis
           files={status.unstaged}
           selected={pick?.list === "unstaged" ? pick.file.path : undefined}
           onSelect={(file) => setPick({ file, list: "unstaged" })}
+          layoutId={glide}
           actions={(f) => (
             <>
               {f.status !== "?" && f.status !== "A" && iconBtn("Blame e histórico", <UserRoundSearch />, () => onFileHistory(f.path))}
@@ -225,8 +236,10 @@ export function WorkingTree({ repo, status, state, headPushed, recent, onFileHis
           selected={pick?.list === "staged" ? pick.file.path : undefined}
           onSelect={(file) => setPick({ file, list: "staged" })}
           actions={(f) => iconBtn("Remover do stage", <Minus />, () => unstage([f]))}
+          layoutId={glide}
         />
       </ScrollArea>
+      </LayoutGroup>
 
       {pick?.list === "conflicted" ? (
         <ConflictView repo={repo} file={pick.file.path} kind={state.kind} version={status} run={run} />

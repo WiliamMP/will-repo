@@ -29,6 +29,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { Dashboard } from "@/components/Dashboard";
 import { RepoView } from "@/components/RepoView";
 import { CommandPalette } from "@/components/CommandPalette";
+import { MotionProvider } from "@/components/motion";
 import { SettingsDialog } from "@/components/Settings";
 import type { PageId } from "@/components/SettingsPages";
 import { dragWindow, WindowControls } from "@/components/WindowControls";
@@ -204,6 +205,7 @@ export default function App({ gitError }: { gitError: string | null }) {
   });
 
   return (
+    <MotionProvider>
     <TooltipProvider delayDuration={300}>
       <Toaster theme={theme} position="bottom-right" richColors />
       <div className="flex h-full flex-col bg-background">
@@ -294,5 +296,6 @@ export default function App({ gitError }: { gitError: string | null }) {
         )}
       </div>
     </TooltipProvider>
+    </MotionProvider>
   );
 }

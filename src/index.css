@@ -233,3 +233,13 @@
     background-clip: padding-box;
     }
 }
+
+/* Settings > Aparência > Animações = Desligadas: also stops the CSS animations
+   (dialogs, menus, toasts); motion components are handled by MotionProvider */
+html[data-motion="off"] *,
+html[data-motion="off"] *::before,
+html[data-motion="off"] *::after {
+  animation-duration: 0s !important;
+  animation-delay: 0s !important;
+  transition-duration: 0s !important;
+}

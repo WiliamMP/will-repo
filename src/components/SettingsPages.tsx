@@ -116,9 +116,10 @@ export const PAGES: Page[] = [
     sections: [
       { id: "theme", title: "Tema" },
       { id: "zoom", title: "Zoom" },
+      { id: "motion", title: "Animações" },
       { id: "history", title: "Histórico" },
     ],
-    keywords: "tema escuro claro sistema cor zoom tamanho fonte texto neon avatar foto autor minimapa",
+    keywords: "tema escuro claro sistema cor zoom tamanho fonte texto neon avatar foto autor minimapa animação animações movimento",
     render: (ctx) => <AppearancePage {...ctx} />,
   },
   {
@@ -542,6 +543,21 @@ function AppearancePage({ theme, setTheme, goTo }: SettingsContext) {
           format={(n) => `${Math.round(n * 100)}%`}
           onChange={set("zoom")}
         />
+      </Section>
+
+      <Section id="motion" title="Animações" description="Movimento ao preparar arquivos, trocar de aba e abrir listas.">
+        <Row label="Animações" description="Completas segue a opção “Efeitos de animação” do Windows.">
+          <Select value={s.animations} onValueChange={(v) => set("animations")(v as Settings["animations"])}>
+            <SelectTrigger className="w-40">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="full">Completas</SelectItem>
+              <SelectItem value="reduced">Reduzidas</SelectItem>
+              <SelectItem value="off">Desligadas</SelectItem>
+            </SelectContent>
+          </Select>
+        </Row>
       </Section>
 
       <Section id="history" title="Histórico">
