@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { LucideIcon } from "lucide-react";
 import {
   AlertTriangle,
@@ -18,6 +18,7 @@ import {
   X,
 } from "lucide-react";
 import { ask } from "@tauri-apps/plugin-dialog";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Kbd } from "@/components/ui/kbd";
@@ -35,6 +36,9 @@ import { TagDialog } from "@/components/TagDialog";
 import { WorkingTree } from "@/components/WorkingTree";
 import { useRepo, type RepoApi } from "@/hooks/use-repo";
 import { git, type Commit, type OpAction } from "@/lib/git";
+
+// ponytail: fixed interval, make it a setting when the settings screen exists
+const AUTO_FETCH_MINUTES = 5;
 
 const confirm = (message: string, title: string, okLabel: string) =>
   ask(message, { title, kind: "warning", okLabel, cancelLabel: "Cancelar" });
@@ -65,9 +69,33 @@ export function RepoView({ path }: { path: string }) {
     if (stateKind) setTab("changes");
   }, [stateKind]);
 
-  const fetch = () => run("fetch", git.fetch, "Fetch concluído");
+  const fetch = () => run("fetch", (p) => git.fetch(p, false), "Fetch concluído");
   const pull = () => run("pull", git.pull, "Pull concluído");
   const push = () => run("push", git.push, "Push concluído");
+
+  // Background fetch every few minutes (only the open tab is mounted, so only it fetches).
+  // The interval callback reads `latest` because its closure would keep old state.
+  const latest = useRef({ busy, behind: 0 });
+  latest.current = { busy, behind: data?.tracking.behind ?? 0 };
+  useEffect(() => {
+    const id = setInterval(async () => {
+      if (latest.current.busy || document.hidden) return;
+      const before = latest.current.behind;
+      try {
+        await git.fetch(path, true);
+      } catch {
+        return; // offline or no remote: try again next time, no error toast every 5 minutes
+      }
+      await reload();
+      const t = await git.tracking(path).catch(() => null);
+      if (t && t.behind > before)
+        toast.info(`${t.behind - before} commit(s) novo(s) em ${t.upstream}`, {
+          duration: 15000,
+          action: { label: "Pull", onClick: () => run("pull", git.pull, "Pull concluído") },
+        });
+    }, AUTO_FETCH_MINUTES * 60_000);
+    return () => clearInterval(id);
+  }, [path, reload, run]);
 
   // Keyboard shortcuts (like TActionList shortcuts in Delphi)
   useEffect(() => {

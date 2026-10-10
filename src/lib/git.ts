@@ -123,7 +123,8 @@ export const git = {
     invoke<void>("create_tag", { repo, name, hash, message }),
   deleteTag: (repo: string, name: string) => invoke<void>("delete_tag", { repo, name }),
   pushTag: (repo: string, name: string) => invoke<void>("push_tag", { repo, name }),
-  fetch: (repo: string) => invoke<void>("fetch", { repo }),
+  /** background: never opens a login window (auto fetch) */
+  fetch: (repo: string, background: boolean) => invoke<void>("fetch", { repo, background }),
   pull: (repo: string) => invoke<void>("pull", { repo }),
   push: (repo: string) => invoke<void>("push", { repo }),
   checkout: (repo: string, branch: string, remote: boolean) => invoke<void>("checkout", { repo, branch, remote }),

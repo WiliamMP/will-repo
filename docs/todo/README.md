@@ -16,7 +16,6 @@ Lista de próximas funcionalidades do will-repo. Tamanho estimado entre parênte
 
 ## Conforto
 
-- [ ] **Fetch automático** a cada X minutos, com aviso quando houver commits novos no remote. (pequeno)
 - [ ] **Tela de configurações**: tema, intervalo do fetch, editor externo, nome e email do git. (médio)
 - [ ] **Paleta de comandos (Ctrl+K)** para executar qualquer ação pelo teclado. (médio)
 - [ ] **Virtualizar o diff** para arquivos muito grandes (hoje marcado com `ponytail:` em `DiffView.tsx`). (pequeno)
@@ -88,3 +87,4 @@ Recursos inspirados no Sourcetree, no GitKraken e no Fork, repensados para o est
 - [x] Descartar sem medo: backup antes de cada descarte, "Desfazer" no aviso e lista de descartes recentes
 - [x] Assistente de mensagem: chips de Conventional Commits, mensagens recentes e contador do título
 - [x] Links de issues: #123 no título e no corpo do commit abre no GitHub; detalhes mostram o corpo da mensagem
+- [x] Fetch automático a cada 5 minutos, com aviso e botão de Pull quando chegam commits novos

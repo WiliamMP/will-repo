@@ -290,9 +290,15 @@ pub fn commit_message(repo: String, rev: String) -> Res<String> {
     Ok(git(&repo, &["log", "-1", "--format=%B", &rev, "--"])?.trim_end().to_string())
 }
 
+/// `background` (auto fetch): fail instead of opening the Git Credential Manager window
 #[tauri::command(async)]
-pub fn fetch(repo: String) -> Res<()> {
-    git(&repo, &["fetch", "--all", "--prune"]).map(drop)
+pub fn fetch(repo: String, background: bool) -> Res<()> {
+    let args = ["fetch", "--all", "--prune"];
+    let mut cmd = command(&repo, &args);
+    if background {
+        cmd.env("GCM_INTERACTIVE", "never");
+    }
+    check(cmd.output().map_err(|e| e.to_string())?, &args).map(drop)
 }
 
 /// Fast-forward only: never creates a merge commit behind the user's back
