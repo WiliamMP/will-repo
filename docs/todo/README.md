@@ -46,7 +46,6 @@ Recursos inspirados no Sourcetree, no GitKraken e no Fork, repensados para o est
 
 ### Fluxos e estrutura
 
-- [ ] **Terminal integrado** [GitKraken]: painel de terminal na pasta do repositório (Ctrl+`). (médio)
 
 ### Dashboard e GitHub
 
@@ -77,3 +76,4 @@ Recursos inspirados no Sourcetree, no GitKraken e no Fork, repensados para o est
 - [x] Máquina do tempo (reflog) com branch/checkout/voltar para cá, e Ctrl+Z para commit, amend, checkout, merge, pull, reset, rebase e branch excluída
 - [x] Arrastar e soltar branches (grafo e sidebar) com menu mesclar/rebase/cherry-pick; modelos de branch (feature/, fix/, release/, hotfix/) com base e "Finalizar"
 - [x] Submódulos (estado, baixar/atualizar, abrir em nova aba), worktrees (criar, abrir em aba, remover) e Git LFS (padrões e arquivos)
+- [x] Terminal integrado (Ctrl+`): shell real em PTY com xterm.js, várias abas, tema Neon

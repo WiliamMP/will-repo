@@ -67,6 +67,7 @@ const SHORTCUTS: { id: string; title: string; items: [string, string[]][] }[] = 
       ["Pull", ["Ctrl", "Shift", "L"]],
       ["Push", ["Ctrl", "Shift", "P"]],
       ["Desfazer última ação do git", ["Ctrl", "Z"]],
+      ["Terminal integrado", ["Ctrl", "`"]],
     ],
   },
   {
@@ -737,7 +738,7 @@ function IntegrationsPage() {
         )}
       </Section>
 
-      <Section id="terminal" title="Terminal" description="Aberto na pasta do repositório pelo botão Terminal.">
+      <Section id="terminal" title="Terminal" description="Shell do terminal integrado (Ctrl+`) e programa do terminal externo (paleta). O Windows Terminal não roda dentro do app: no integrado ele usa o PowerShell.">
         <Row label="Terminal">
           <Select value={s.terminal} onValueChange={(v) => set("terminal")(v as Settings["terminal"])}>
             <SelectTrigger className="w-56">

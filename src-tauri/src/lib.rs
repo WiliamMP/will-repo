@@ -1,6 +1,7 @@
 mod git;
 mod github;
 mod parse;
+mod pty;
 
 use tauri::Manager;
 
@@ -22,7 +23,12 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        .manage(pty::Terminals::default())
         .invoke_handler(tauri::generate_handler![
+            pty::pty_spawn,
+            pty::pty_write,
+            pty::pty_resize,
+            pty::pty_kill,
             close_splash,
             git::git_version,
             git::open_repo,

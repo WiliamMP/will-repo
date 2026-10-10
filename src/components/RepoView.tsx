@@ -45,6 +45,7 @@ import { BranchDialog } from "@/components/BranchDialog";
 import { CommitDetails, StashDetails } from "@/components/CommitDetails";
 import { FileBrowser, type BrowserTarget } from "@/components/FileBrowser";
 import { TimeMachine } from "@/components/TimeMachine";
+import { TerminalPanel } from "@/components/TerminalPanel";
 import { LfsDialog, StructureSections, WorktreeDialog, type StructureActions } from "@/components/RepoStructure";
 import { History, type CommitActions } from "@/components/History";
 import { PullRequests } from "@/components/PullRequests";
@@ -82,6 +83,7 @@ export function RepoView({ path, onOpenRepo }: RepoViewProps) {
   const [timeMachine, setTimeMachine] = useState(false);
   const [worktreeOpen, setWorktreeOpen] = useState(false);
   const [lfsOpen, setLfsOpen] = useState(false);
+  const [terminalOpen, setTerminalOpen] = useState(false);
   // drag and drop of a branch onto another: the menu shows where it was dropped
   const [dropMenu, setDropMenu] = useState<{ source: string; target: string; x: number; y: number } | null>(null);
   const [defaultBase, setDefaultBase] = useState("main");
@@ -170,6 +172,10 @@ export function RepoView({ path, onOpenRepo }: RepoViewProps) {
       if (e.key === "F5") {
         e.preventDefault();
         reload();
+      } else if (e.ctrlKey && e.code === "Backquote") {
+        // physical key, so it also works on ABNT2 keyboards where ` is a dead key
+        e.preventDefault();
+        setTerminalOpen((o) => !o);
       } else if (e.ctrlKey && !e.shiftKey && k === "z" && !typing && !busy) {
         // inside a text box Ctrl+Z keeps undoing text
         e.preventDefault();
@@ -317,7 +323,8 @@ export function RepoView({ path, onOpenRepo }: RepoViewProps) {
         { id: "browse", title: "Navegar pelos arquivos", group: "Repositório", icon: FolderTree, keywords: "blame árvore pasta conteúdo", run: () => setBrowser({ rev: "HEAD" }) },
         { id: "search", title: "Buscar commits", group: "Repositório", icon: Search, keywords: "procurar histórico", run: () => document.getElementById("history-search")?.focus() },
         { id: "editor", title: "Abrir no editor", group: "Repositório", icon: Code2, keywords: "vscode code", run: () => openInEditor(repo!.path, "") },
-        { id: "terminal", title: "Abrir terminal aqui", group: "Repositório", icon: SquareTerminal, run: () => git.openTerminal(repo!.path).catch((e) => toast.error(String(e))) },
+        { id: "terminal-panel", title: "Terminal integrado", group: "Repositório", icon: SquareTerminal, keywords: "console shell powershell", shortcut: ["Ctrl", "`"], run: () => setTerminalOpen((o) => !o) },
+        { id: "terminal", title: "Abrir terminal externo", group: "Repositório", icon: SquareTerminal, keywords: "windows terminal janela", run: () => git.openTerminal(repo!.path).catch((e) => toast.error(String(e))) },
         { id: "tab-details", title: "Mostrar detalhes do commit", group: "Painel", icon: FileText, run: () => setTab("details") },
         { id: "tab-changes", title: "Mostrar alterações (commit)", group: "Painel", icon: GitCommitHorizontal, keywords: "stage preparar", run: () => setTab("changes") },
         { id: "tab-prs", title: "Mostrar pull requests", group: "Painel", icon: GitPullRequest, keywords: "pr github", run: () => setTab("prs") },
@@ -410,8 +417,8 @@ export function RepoView({ path, onOpenRepo }: RepoViewProps) {
             variant="ghost"
             size="sm"
             className="text-muted-foreground"
-            title="Abrir um terminal na pasta (Configurações > Integrações)"
-            onClick={() => git.openTerminal(repo.path).catch((e) => toast.error(String(e)))}
+            title="Terminal integrado (Ctrl+`). O terminal externo fica na paleta (Ctrl+K)."
+            onClick={() => setTerminalOpen((o) => !o)}
           >
             <SquareTerminal /> Terminal
           </Button>
@@ -448,7 +455,10 @@ export function RepoView({ path, onOpenRepo }: RepoViewProps) {
 
       <OperationBanner api={api} onShowConflicts={() => setTab("changes")} />
 
-      <ResizablePanelGroup orientation="horizontal" className="min-h-0 flex-1">
+      {/* main area on top, integrated terminal below (Ctrl+`) */}
+      <ResizablePanelGroup orientation="vertical" className="min-h-0 flex-1">
+      <ResizablePanel id="main" minSize={200}>
+      <ResizablePanelGroup orientation="horizontal" className="h-full">
         <ResizablePanel defaultSize="18" minSize={180}>
           <Sidebar
             refs={data.refs}
@@ -554,6 +564,16 @@ export function RepoView({ path, onOpenRepo }: RepoViewProps) {
             </TabsContent>
           </Tabs>
         </ResizablePanel>
+      </ResizablePanelGroup>
+      </ResizablePanel>
+      {terminalOpen && (
+        <>
+          <ResizableHandle />
+          <ResizablePanel id="terminal" defaultSize="35" minSize={120}>
+            <TerminalPanel cwd={repo.path} onClose={() => setTerminalOpen(false)} />
+          </ResizablePanel>
+        </>
+      )}
       </ResizablePanelGroup>
 
       <footer className="flex h-7 shrink-0 items-center gap-4 border-t bg-card px-3 text-xs text-muted-foreground">

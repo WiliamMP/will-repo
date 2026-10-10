@@ -25,6 +25,7 @@ tauri-plugin-dialog = "2"
 tauri-plugin-opener = "2"
 reqwest = { version = "0.12", features = ["json"] }
 keyring = { version = "3", features = ["windows-native"] }
+portable-pty = "0.9"
 
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration
