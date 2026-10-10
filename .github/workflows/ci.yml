@@ -48,3 +48,27 @@ jobs:
       - name: Rust tests
         working-directory: src-tauri
         run: cargo test
+
+  # The real app, driven through its WebView2 (see e2e/). Separate job: it builds
+  # a debug variant of the app, so it runs in parallel with the checks above.
+  e2e:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          key: e2e
+
+      - run: npm ci
+
+      - name: End-to-end tests
+        run: npm run e2e
