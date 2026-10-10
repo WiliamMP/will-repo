@@ -403,6 +403,129 @@ pub fn create_branch(repo: String, name: String, checkout: bool) -> Res<()> {
     }
 }
 
+// ---------- Time machine (reflog) and undo ----------
+
+/// One move of HEAD: commit, checkout, reset, merge, rebase...
+#[derive(Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct ReflogEntry {
+    hash: String,
+    /// "HEAD@{3}"
+    selector: String,
+    /// "commit", "checkout", "reset", "merge", "rebase"...
+    action: String,
+    /// the rest of git's description ("moving from main to feature", the commit subject...)
+    message: String,
+    timestamp: i64,
+}
+
+fn parse_reflog(out: &str) -> Vec<ReflogEntry> {
+    out.split('\u{1e}')
+        .map(str::trim)
+        .filter(|r| !r.is_empty())
+        .filter_map(|r| {
+            let f: Vec<&str> = r.split(FS).collect();
+            if f.len() < 4 {
+                return None;
+            }
+            // "commit (amend): msg" -> ("commit (amend)", "msg"); "merge feature: ..." -> "merge"
+            let (head, message) = f[2].split_once(": ").unwrap_or((f[2], ""));
+            let action = if head.starts_with("merge ") { "merge" } else { head };
+            Some(ReflogEntry {
+                hash: f[0].into(),
+                selector: f[1].into(),
+                action: action.into(),
+                message: message.into(),
+                timestamp: f[3].parse().unwrap_or(0),
+            })
+        })
+        .collect()
+}
+
+/// Every position HEAD had, newest first. Recovers "lost" commits after a reset or rebase.
+#[tauri::command(async)]
+pub fn reflog(repo: String, limit: usize) -> Res<Vec<ReflogEntry>> {
+    let n = limit.to_string();
+    let out = git(&repo, &["reflog", "show", "-n", &n, "--format=%H%x1f%gd%x1f%gs%x1f%ct%x1e", "HEAD"])
+        // a new repository without commits has no reflog yet
+        .unwrap_or_default();
+    Ok(parse_reflog(&out))
+}
+
+#[derive(Serialize, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct UndoPlan {
+    /// shown before doing it: "Desfazer o commit \"x\"..."
+    description: String,
+    #[serde(skip)]
+    args: Vec<String>,
+}
+
+/// What undoing the last move of HEAD means, based on the reflog
+fn plan_undo(repo: &str) -> Res<UndoPlan> {
+    let last = reflog(repo.into(), 1)?.into_iter().next().ok_or("Nada para desfazer ainda")?;
+    let has_previous = git(repo, &["rev-parse", "--verify", "--quiet", "HEAD@{1}"]).is_ok();
+    let plan = |description: String, args: &[&str]| Ok(UndoPlan { description, args: args.iter().map(|a| a.to_string()).collect() });
+    match last.action.as_str() {
+        "commit" | "commit (amend)" | "cherry-pick" | "revert" if has_previous => plan(
+            // --soft: the commit goes away, its changes stay staged
+            format!("Desfazer \"{}\" ({}). As alterações voltam para preparados.", last.message, last.action),
+            &["reset", "--soft", "HEAD@{1}"],
+        ),
+        "checkout" => {
+            let from = last.message.strip_prefix("moving from ").and_then(|m| m.split(" to ").next()).ok_or("Checkout sem origem")?;
+            let is_branch = git(repo, &["rev-parse", "--verify", "--quiet", &format!("refs/heads/{from}")]).is_ok();
+            if is_branch {
+                plan(format!("Voltar para a branch {from}"), &["switch", from])
+            } else {
+                plan(format!("Voltar para {from}"), &["switch", "--detach", from])
+            }
+        }
+        // a rebase leaves many reflog entries; ORIG_HEAD is where the branch was before it
+        a if a.starts_with("rebase") => plan("Desfazer o rebase (a branch volta para antes dele)".into(), &["reset", "--keep", "ORIG_HEAD"]),
+        // --keep: refuses instead of overwriting local changes
+        "merge" | "commit (merge)" | "pull" | "reset" if has_previous => {
+            plan(format!("Desfazer o {} ({})", last.action, last.message), &["reset", "--keep", "HEAD@{1}"])
+        }
+        _ => Err(format!("Não sei desfazer \"{}: {}\". Use a máquina do tempo.", last.action, last.message)),
+    }
+}
+
+#[tauri::command(async)]
+pub fn undo_preview(repo: String) -> Res<UndoPlan> {
+    plan_undo(&repo)
+}
+
+/// Undoes the last move of HEAD and returns what was done
+#[tauri::command(async)]
+pub fn undo(repo: String) -> Res<String> {
+    let plan = plan_undo(&repo)?;
+    git(&repo, &plan.args.iter().map(String::as_str).collect::<Vec<_>>())?;
+    Ok(plan.description)
+}
+
+/// Time machine actions on any reflog position
+#[derive(Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum RestoreAction {
+    /// new branch pointing there (safest)
+    Branch,
+    /// look around there, detached
+    Checkout,
+    /// move the current branch there, keeping local changes
+    Reset,
+}
+
+#[tauri::command(async)]
+pub fn restore(repo: String, hash: String, action: RestoreAction, name: Option<String>) -> Res<()> {
+    match action {
+        RestoreAction::Branch => git(&repo, &["branch", name.as_deref().ok_or("Falta o nome da branch")?, &hash]),
+        RestoreAction::Checkout => git(&repo, &["switch", "--detach", &hash]),
+        RestoreAction::Reset => git(&repo, &["reset", "--keep", &hash]),
+    }
+    .map(drop)
+}
+
 // ---------- Files at any commit: tree, history, blame ----------
 
 /// Every file path at `rev` (a commit or "HEAD")
@@ -498,10 +621,13 @@ pub fn rebase(repo: String, onto: String) -> Res<()> {
     git(&repo, &["rebase", &onto]).map(drop)
 }
 
-/// -d refuses to delete a branch that is not merged; -D (force) deletes anyway
+/// -d refuses to delete a branch that is not merged; -D (force) deletes anyway.
+/// Returns the commit it pointed to, so Ctrl+Z can bring it back.
 #[tauri::command(async)]
-pub fn delete_branch(repo: String, name: String, force: bool) -> Res<()> {
-    git(&repo, &["branch", if force { "-D" } else { "-d" }, &name]).map(drop)
+pub fn delete_branch(repo: String, name: String, force: bool) -> Res<String> {
+    let hash = git(&repo, &["rev-parse", &format!("refs/heads/{name}")])?.trim().to_string();
+    git(&repo, &["branch", if force { "-D" } else { "-d" }, &name])?;
+    Ok(hash)
 }
 
 // ---------- Cherry-pick, revert, tags ----------
@@ -1347,7 +1473,10 @@ mod tests {
         // not merged into main yet: -d refuses, -D works
         git(&repo, &["switch", "-q", "main"]).unwrap();
         assert!(delete_branch(r(), "feature".into(), false).is_err());
-        delete_branch(r(), "feature".into(), true).unwrap();
+        let was = delete_branch(r(), "feature".into(), true).unwrap();
+        // the returned hash is enough to bring it back (Ctrl+Z)
+        restore(r(), was, RestoreAction::Branch, Some("feature".into())).unwrap();
+        assert!(refs(r()).unwrap().branches.contains(&"feature".to_string()));
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -1607,6 +1736,46 @@ mod tests {
         assert_eq!((b[1].text.as_str(), b[1].author.as_str(), b[1].email.as_str()), ("TWO", "Ana", "ana@x"));
         // blame of an older version
         assert_eq!(blame(r(), "HEAD~1".into(), "src/a.txt".into()).unwrap()[1].text, "two");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn undo_and_time_machine() {
+        let (dir, repo) = temp_repo("undo");
+        let r = || repo.clone();
+        let head = || git(&repo, &["rev-parse", "HEAD"]).unwrap().trim().to_string();
+        let base = head();
+
+        // undo a commit: gone, changes staged
+        std::fs::write(dir.join("f.txt"), "two\n").unwrap();
+        stage(r(), vec!["f.txt".into()]).unwrap();
+        commit(r(), "segundo".into(), false).unwrap();
+        assert!(undo_preview(r()).unwrap().description.contains("segundo"));
+        undo(r()).unwrap();
+        assert_eq!(head(), base);
+        assert_eq!(status(r()).unwrap().staged[0].path, "f.txt");
+        commit(r(), "segundo".into(), false).unwrap();
+        let second = head();
+
+        // undo a checkout: back to the branch
+        create_branch(r(), "feature".into(), true).unwrap();
+        assert_eq!(undo_preview(r()).unwrap().description, "Voltar para a branch main");
+        undo(r()).unwrap();
+        assert_eq!(refs(r()).unwrap().head.as_deref(), Some("main"));
+
+        // undo a reset: the "lost" commit comes back
+        git(&repo, &["reset", "-q", "--hard", &base]).unwrap();
+        undo(r()).unwrap();
+        assert_eq!(head(), second);
+
+        // time machine: entries newest first, branch from an old position
+        let entries = reflog(r(), 50).unwrap();
+        assert_eq!(entries[0].action, "reset");
+        assert!(entries.iter().any(|e| e.action == "checkout" && e.message == "moving from main to feature"));
+        restore(r(), base.clone(), RestoreAction::Branch, Some("resgate".into())).unwrap();
+        assert!(refs(r()).unwrap().branches.contains(&"resgate".to_string()));
+        restore(r(), base.clone(), RestoreAction::Reset, None).unwrap();
+        assert_eq!(head(), base);
         let _ = std::fs::remove_dir_all(&dir);
     }
 

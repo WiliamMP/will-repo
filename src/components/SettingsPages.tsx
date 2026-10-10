@@ -66,6 +66,7 @@ const SHORTCUTS: { id: string; title: string; items: [string, string[]][] }[] = 
       ["Fetch", ["Ctrl", "Shift", "F"]],
       ["Pull", ["Ctrl", "Shift", "L"]],
       ["Push", ["Ctrl", "Shift", "P"]],
+      ["Desfazer última ação do git", ["Ctrl", "Z"]],
     ],
   },
   {

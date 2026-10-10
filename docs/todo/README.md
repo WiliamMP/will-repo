@@ -31,8 +31,6 @@ Recursos inspirados no Sourcetree, no GitKraken e no Fork, repensados para o est
 
 ### Segurança e "desfazer"
 
-- [ ] **Máquina do tempo** [reflog do Fork]: linha do tempo de todos os movimentos do HEAD (commits, checkouts, resets, rebases) com restauração em um clique. Recupera commits "perdidos". (médio)
-- [ ] **Ctrl+Z para ações do git** [undo/redo do GitKraken]: desfazer o último commit, checkout, merge ou branch excluída. (médio)
 
 ### Grafo e histórico
 
@@ -81,3 +79,4 @@ Recursos inspirados no Sourcetree, no GitKraken e no Fork, repensados para o est
 - [x] Grafo: avatares dos autores, stashes como nós, modo foco (isolar/esconder branches) com destaque do caminho do HEAD, minimapa
 - [x] Diff: virtualizado (só as linhas visíveis), modo lado a lado com seleção de linhas, diff de imagens (lado a lado, deslizar, sobrepor)
 - [x] Navegador de arquivos em qualquer commit (árvore, conteúdo, imagens), blame e histórico do arquivo
+- [x] Máquina do tempo (reflog) com branch/checkout/voltar para cá, e Ctrl+Z para commit, amend, checkout, merge, pull, reset, rebase e branch excluída

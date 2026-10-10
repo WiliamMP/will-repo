@@ -88,6 +88,10 @@ export type PullRequest = {
 export type PullRequests = { defaultBranch: string; items: PullRequest[] };
 export type DeviceCode = { deviceCode: string; userCode: string; verificationUri: string; interval: number };
 
+export type ReflogEntry = { hash: string; selector: string; action: string; message: string; timestamp: number };
+export type UndoPlan = { description: string };
+export type RestoreAction = "branch" | "checkout" | "reset";
+
 export type BlameLine = {
   hash: string;
   author: string;
@@ -172,7 +176,13 @@ export const git = {
   push: (repo: string) => invoke<void>("push", { repo }),
   checkout: (repo: string, branch: string, remote: boolean) => invoke<void>("checkout", { repo, branch, remote }),
   createBranch: (repo: string, name: string, checkout: boolean) => invoke<void>("create_branch", { repo, name, checkout }),
-  deleteBranch: (repo: string, name: string, force: boolean) => invoke<void>("delete_branch", { repo, name, force }),
+  /** returns the commit the branch pointed to (for undo) */
+  deleteBranch: (repo: string, name: string, force: boolean) => invoke<string>("delete_branch", { repo, name, force }),
+  reflog: (repo: string, limit: number) => invoke<ReflogEntry[]>("reflog", { repo, limit }),
+  undoPreview: (repo: string) => invoke<UndoPlan>("undo_preview", { repo }),
+  undo: (repo: string) => invoke<string>("undo", { repo }),
+  restore: (repo: string, hash: string, action: RestoreAction, name?: string) =>
+    invoke<void>("restore", { repo, hash, action, name: name ?? null }),
   merge: (repo: string, branch: string) => invoke<void>("merge", { repo, branch }),
   rebase: (repo: string, onto: string) => invoke<void>("rebase", { repo, onto }),
   operation: (repo: string, action: OpAction) => invoke<void>("operation", { repo, action }),

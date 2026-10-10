@@ -4,6 +4,8 @@ import {
   AlertTriangle,
   Cloud,
   FolderTree,
+  History as HistoryIcon,
+  Undo2,
   Code2,
   FileText,
   GitCommitHorizontal,
@@ -39,6 +41,7 @@ import { AnimatedShinyText } from "@/components/ui/animated-shiny-text";
 import { BranchDialog } from "@/components/BranchDialog";
 import { CommitDetails, StashDetails } from "@/components/CommitDetails";
 import { FileBrowser, type BrowserTarget } from "@/components/FileBrowser";
+import { TimeMachine } from "@/components/TimeMachine";
 import { History, type CommitActions } from "@/components/History";
 import { PullRequests } from "@/components/PullRequests";
 import { Sidebar, type BranchActions } from "@/components/Sidebar";
@@ -66,6 +69,9 @@ export function RepoView({ path }: { path: string }) {
   const [branchOpen, setBranchOpen] = useState(false);
   const [stashOpen, setStashOpen] = useState(false);
   const [browser, setBrowser] = useState<BrowserTarget | null>(null);
+  const [timeMachine, setTimeMachine] = useState(false);
+  // last branch deleted in the app: deleting doesn't move HEAD, so the reflog can't undo it
+  const deleted = useRef<{ name: string; hash: string; at: number } | null>(null);
   useEffect(() => {
     git.githubUrl(path).then(setGithub, () => setGithub(null));
   }, [path]);
@@ -119,13 +125,36 @@ export function RepoView({ path }: { path: string }) {
     return () => clearInterval(id);
   }, [path, reload, run, autoFetchMinutes]);
 
+  // Ctrl+Z: undo the last git action (a deleted branch, or the last move of HEAD in the reflog)
+  const undoLast = async () => {
+    const d = deleted.current;
+    const latest = (await git.reflog(path, 1).catch(() => []))[0];
+    if (d && (!latest || d.at >= latest.timestamp)) {
+      if (!(await confirm(`Recriar a branch ${d.name}, excluída há pouco?`, "Desfazer", "Recriar"))) return;
+      if (await run("desfazer", (p) => git.restore(p, d.hash, "branch", d.name), `Branch ${d.name} recriada`)) deleted.current = null;
+      return;
+    }
+    try {
+      const plan = await git.undoPreview(path);
+      if (await confirm(plan.description, "Desfazer", "Desfazer")) run("desfazer", (p) => git.undo(p), "Desfeito");
+    } catch (e) {
+      toast.info(String(e));
+    }
+  };
+
   // Keyboard shortcuts (like TActionList shortcuts in Delphi)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const k = e.key.toLowerCase();
+      const t = e.target as HTMLElement;
+      const typing = t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable;
       if (e.key === "F5") {
         e.preventDefault();
         reload();
+      } else if (e.ctrlKey && !e.shiftKey && k === "z" && !typing && !busy) {
+        // inside a text box Ctrl+Z keeps undoing text
+        e.preventDefault();
+        undoLast();
       } else if (e.ctrlKey && e.shiftKey && !busy) {
         const action = { f: fetch, l: pull, p: push }[k];
         if (action) {
@@ -156,9 +185,11 @@ export function RepoView({ path }: { path: string }) {
       if (ok) run("rebase", (p) => git.rebase(p, name), `Rebase de ${head} sobre ${name} concluído`);
     },
     remove: async (name) => {
-      if (!(await confirm(`Excluir a branch ${name}?`, "Excluir branch", "Excluir"))) return;
+      if (!(await confirm(`Excluir a branch ${name}? Dá para desfazer com Ctrl+Z.`, "Excluir branch", "Excluir"))) return;
+      const remember = (hash: string) => (deleted.current = { name, hash, at: Date.now() / 1000 });
       try {
-        await git.deleteBranch(path, name, false);
+        remember(await git.deleteBranch(path, name, false));
+        toast.success(`Branch ${name} excluída`, { action: { label: "Desfazer", onClick: () => undoLast() } });
       } catch (e) {
         // -d refuses unmerged branches: offer force delete
         const force = await confirm(
@@ -167,7 +198,7 @@ export function RepoView({ path }: { path: string }) {
           "Excluir à força",
         );
         if (!force) return;
-        await run("branch", (p) => git.deleteBranch(p, name, true));
+        await run("branch", async (p) => remember(await git.deleteBranch(p, name, true)), `Branch ${name} excluída (Ctrl+Z desfaz)`);
       }
       reload();
     },
@@ -224,6 +255,8 @@ export function RepoView({ path }: { path: string }) {
         { id: "reload", title: "Atualizar", group: "Repositório", icon: RefreshCw, keywords: "recarregar refresh", shortcut: ["F5"], run: reload },
         { id: "branch", title: "Nova branch...", group: "Repositório", icon: GitBranch, keywords: "criar", run: () => setBranchOpen(true) },
         { id: "stash", title: "Guardar alterações (stash)...", group: "Repositório", icon: Archive, run: () => setStashOpen(true) },
+        { id: "undo", title: "Desfazer última ação do git", group: "Repositório", icon: Undo2, keywords: "undo voltar", shortcut: ["Ctrl", "Z"], run: undoLast },
+        { id: "time-machine", title: "Máquina do tempo (reflog)", group: "Repositório", icon: HistoryIcon, keywords: "reflog recuperar perdido", run: () => setTimeMachine(true) },
         { id: "browse", title: "Navegar pelos arquivos", group: "Repositório", icon: FolderTree, keywords: "blame árvore pasta conteúdo", run: () => setBrowser({ rev: "HEAD" }) },
         { id: "search", title: "Buscar commits", group: "Repositório", icon: Search, keywords: "procurar histórico", run: () => document.getElementById("history-search")?.focus() },
         { id: "editor", title: "Abrir no editor", group: "Repositório", icon: Code2, keywords: "vscode code", run: () => openInEditor(repo!.path, "") },
@@ -299,6 +332,12 @@ export function RepoView({ path }: { path: string }) {
           />
         </div>
         <div className="ml-auto flex items-center gap-1">
+          <Button variant="ghost" size="icon-sm" className="text-muted-foreground" title="Desfazer última ação do git (Ctrl+Z)" disabled={!!busy} onClick={undoLast}>
+            <Undo2 />
+          </Button>
+          <Button variant="ghost" size="icon-sm" className="text-muted-foreground" title="Máquina do tempo: tudo por onde o HEAD passou" onClick={() => setTimeMachine(true)}>
+            <HistoryIcon />
+          </Button>
           <Button
             variant="ghost"
             size="sm"
@@ -320,6 +359,10 @@ export function RepoView({ path }: { path: string }) {
         </div>
       </header>
 
+      <TimeMachine repo={repo.path} open={timeMachine} onOpenChange={setTimeMachine} run={run} onUndo={() => {
+        setTimeMachine(false);
+        undoLast();
+      }} />
       <FileBrowser repo={repo.path} target={browser} onClose={() => setBrowser(null)} onSelectCommit={selectCommit} />
 
       <TagDialog
