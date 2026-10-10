@@ -8,6 +8,15 @@ const host = process.env.TAURI_DEV_HOST;
 // https://vite.dev/config/
 export default defineConfig(() => ({
   plugins: [react(), tailwindcss()],
+  // two pages: the app and the splash window shown while it loads
+  build: {
+    rollupOptions: {
+      input: {
+        main: path.resolve(import.meta.dirname, "index.html"),
+        splashscreen: path.resolve(import.meta.dirname, "splashscreen.html"),
+      },
+    },
+  },
   resolve: {
     alias: { "@": path.resolve(import.meta.dirname, "./src") },
   },

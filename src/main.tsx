@@ -1,10 +1,23 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
+import { git } from "./lib/git";
+import { splashStep } from "./lib/splash";
 import "./index.css";
 
-ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>,
+// Startup while the splash is on screen: check git, then mount the app.
+// Each view calls splashDone() once its first data is loaded.
+splashStep("Verificando o git", 0.2);
+git.version().then(
+  () => start(null),
+  (e) => start(String(e)),
 );
+
+function start(gitError: string | null) {
+  splashStep("Carregando a interface", 0.4);
+  ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
+    <React.StrictMode>
+      <App gitError={gitError} />
+    </React.StrictMode>,
+  );
+}

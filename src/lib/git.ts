@@ -91,6 +91,8 @@ export type DiffLine = {
 
 export const git = {
   openRepo: (path: string) => invoke<RepoInfo>("open_repo", { path }),
+  /** "git version 2.x"; fails when git is not installed */
+  version: () => invoke<string>("git_version"),
   userInfo: () => invoke<UserInfo>("user_info"),
   setUserInfo: (name: string, email: string) => invoke<void>("set_user_info", { name, email }),
   identities: () => invoke<Identity[]>("identities"),

@@ -38,6 +38,7 @@ import { TagDialog } from "@/components/TagDialog";
 import { WorkingTree } from "@/components/WorkingTree";
 import { useRepo, type RepoApi } from "@/hooks/use-repo";
 import { useSettings } from "@/hooks/use-settings";
+import { splashDone, splashStep } from "@/lib/splash";
 import { git, openInEditor, type Commit, type OpAction } from "@/lib/git";
 
 const confirm = (message: string, title: string, okLabel: string) =>
@@ -55,6 +56,12 @@ export function RepoView({ path }: { path: string }) {
   useEffect(() => {
     git.githubUrl(path).then(setGithub, () => setGithub(null));
   }, [path]);
+
+  // Startup: this tab is what the user sees first, so the splash waits for its data
+  useEffect(() => splashStep(`Abrindo ${path.split(/[\\/]/).pop()}`, 0.6), [path]);
+  useEffect(() => {
+    if (data || error) splashDone();
+  }, [data, error]);
 
   const commits = data?.commits ?? [];
   // Default selection: newest commit. After a reload, refresh the object by hash.

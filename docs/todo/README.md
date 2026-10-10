@@ -21,7 +21,6 @@ Lista de próximas funcionalidades do will-repo. Tamanho estimado entre parênte
 
 ## Distribuição
 
-- [ ] **Instalador Windows** (`.msi` / `.exe` via `tauri build`) com ícone próprio. (pequeno)
 - [ ] **Auto-update** via GitHub Releases. (médio)
 - [ ] **CI no GitHub Actions** rodando `cargo test`, typecheck e build. (médio)
 
@@ -87,3 +86,4 @@ Recursos inspirados no Sourcetree, no GitKraken e no Fork, repensados para o est
 - [x] Links de issues: #123 no título e no corpo do commit abre no GitHub; detalhes mostram o corpo da mensagem
 - [x] Fetch automático a cada 5 minutos, com aviso e botão de Pull quando chegam commits novos
 - [x] Tela de configurações no estilo do Discord: conta, identidade (global e por pasta), aparência (tema, zoom), git (fetch automático, modo do pull), diff (contexto, espaços), integrações (editor, terminal), atalhos e sobre
+- [x] Splash screen enquanto o app carrega; ícone próprio (fonte em `src-tauri/icons/icon.svg`, gere os tamanhos com `npx tauri icon`); instaladores com `npm run tauri build` (NSIS em português e MSI em `src-tauri/target/release/bundle/`)

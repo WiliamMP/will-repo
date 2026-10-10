@@ -85,6 +85,12 @@ fn check(out: Output, args: &[&str]) -> Res<String> {
     }
 }
 
+/// Startup check: is git installed and on the PATH?
+#[tauri::command(async)]
+pub fn git_version() -> Res<String> {
+    git(".", &["--version"]).map(|v| v.trim().to_string())
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RepoInfo {

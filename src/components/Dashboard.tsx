@@ -25,6 +25,7 @@ import { BorderBeam } from "@/components/ui/border-beam";
 import { DotPattern } from "@/components/ui/dot-pattern";
 import { ShimmerButton } from "@/components/ui/shimmer-button";
 import { git, relativeDate, type DeviceCode, type GithubProfile, type RepoSummary, type UserInfo } from "@/lib/git";
+import { splashDone, splashStep } from "@/lib/splash";
 import { cn } from "@/lib/utils";
 
 /** GitHub mark (Octicons, MIT). lucide-react has no brand icons. */
@@ -74,6 +75,12 @@ export function Dashboard({ repos, openTabs, onOpen, onPick, onForget }: Props) 
   // All of the user's commits in the last year, from every project
   const myCommits = useMemo(() => cards.flatMap((c) => c.summary?.myCommits ?? []), [cards]);
   const loading = cards.some((c) => !c.summary && !c.error);
+
+  // Startup: the splash waits for the project cards (not for GitHub, which may be slow or offline)
+  useEffect(() => splashStep("Carregando projetos", 0.6), []);
+  useEffect(() => {
+    if (user && !loading) splashDone();
+  }, [user, loading]);
 
   return (
     <div className="min-h-0 flex-1 overflow-auto">

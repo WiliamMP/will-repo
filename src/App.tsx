@@ -11,6 +11,7 @@ import { RepoView } from "@/components/RepoView";
 import { SettingsDialog } from "@/components/Settings";
 import { dragWindow, WindowControls } from "@/components/WindowControls";
 import { useSettings } from "@/hooks/use-settings";
+import { splashDone } from "@/lib/splash";
 import { useTheme } from "@/hooks/use-theme";
 import { git } from "@/lib/git";
 import { cn } from "@/lib/utils";
@@ -40,12 +41,19 @@ function save(key: string, value: unknown) {
 const baseName = (path: string) => path.split(/[\\/]/).filter(Boolean).pop() ?? path;
 
 // Shell: tab bar + one RepoView per tab (like a TPageControl with a frame per page)
-export default function App() {
+export default function App({ gitError }: { gitError: string | null }) {
   const [theme, setTheme] = useTheme();
   const [tabs, setTabs] = useState<Tabs>(() => load(TABS_KEY, { paths: [], active: null }));
   const [recent, setRecent] = useState<string[]>(() => load(RECENT_KEY, []));
   const [settingsOpen, setSettingsOpen] = useState(false);
   const { zoom } = useSettings();
+
+  // Never stay behind the splash: if a view doesn't report ready in time, show the app anyway
+  useEffect(() => {
+    const t = setTimeout(splashDone, 10_000);
+    if (gitError) toast.error("Git não encontrado. Instale em git-scm.com e abra o will-repo de novo.", { duration: Infinity });
+    return () => clearTimeout(t);
+  }, [gitError]);
 
   // Zoom of the whole webview (like Ctrl+ in a browser), so pixel sizes stay consistent
   useEffect(() => {
