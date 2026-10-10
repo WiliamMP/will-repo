@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { FolderGit2, GitFork, Monitor, Moon, Plus, Sun, X } from "lucide-react";
+import { FolderGit2, GitFork, Monitor, Moon, Plus, Settings as SettingsIcon, Sun, X } from "lucide-react";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -8,6 +9,8 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Dashboard } from "@/components/Dashboard";
 import { RepoView } from "@/components/RepoView";
+import { SettingsDialog } from "@/components/Settings";
+import { useSettings } from "@/hooks/use-settings";
 import { useTheme, type ThemeMode } from "@/hooks/use-theme";
 import { git } from "@/lib/git";
 import { cn } from "@/lib/utils";
@@ -41,6 +44,15 @@ export default function App() {
   const [theme, setTheme] = useTheme();
   const [tabs, setTabs] = useState<Tabs>(() => load(TABS_KEY, { paths: [], active: null }));
   const [recent, setRecent] = useState<string[]>(() => load(RECENT_KEY, []));
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const { zoom } = useSettings();
+
+  // Zoom of the whole webview (like Ctrl+ in a browser), so pixel sizes stay consistent
+  useEffect(() => {
+    getCurrentWebview()
+      .setZoom(zoom)
+      .catch((e) => console.error(e));
+  }, [zoom]);
 
   useEffect(() => save(TABS_KEY, tabs), [tabs]);
   useEffect(() => save(RECENT_KEY, recent), [recent]);
@@ -76,12 +88,13 @@ export default function App() {
       return { paths, active };
     });
 
-  // Ctrl+O open, Ctrl+T new tab, Ctrl+W close tab, Ctrl+Tab next tab
+  // Ctrl+O open, Ctrl+T new tab, Ctrl+W close tab, Ctrl+Tab next tab, Ctrl+, settings
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!e.ctrlKey || e.shiftKey) return;
       const k = e.key.toLowerCase();
-      if (k === "o") pickFolder();
+      if (k === ",") setSettingsOpen(true);
+      else if (k === "o") pickFolder();
       else if (k === "t") setTabs((t) => ({ ...t, active: null }));
       else if (k === "w" && tabs.active) close(tabs.active);
       else if (e.key === "Tab" && tabs.paths.length > 1) {
@@ -174,7 +187,19 @@ export default function App() {
               </ToggleGroupItem>
             ))}
           </ToggleGroup>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            className="mb-1 ml-1 shrink-0 self-center text-muted-foreground hover:text-primary"
+            aria-label="Configurações"
+            title="Configurações (Ctrl+,)"
+            onClick={() => setSettingsOpen(true)}
+          >
+            <SettingsIcon />
+          </Button>
         </nav>
+
+        <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} ctx={{ theme, setTheme }} />
 
         {tabs.active ? (
           // key = path: switching tabs mounts a fresh view with its own state

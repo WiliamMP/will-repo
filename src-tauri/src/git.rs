@@ -199,9 +199,25 @@ pub fn commit_files(repo: String, hash: String) -> Res<Vec<FileChange>> {
     Ok(parse::parse_changes(&names, &nums))
 }
 
+/// Diff options from the settings screen: lines of context (-U) and, for read-only
+/// diffs, ignoring whitespace (-w). Working tree diffs never ignore whitespace,
+/// because their hunks must apply back with `git apply`.
+fn diff_opts(context: u32, ignore_ws: bool) -> Vec<String> {
+    let mut v = vec![format!("-U{}", context.clamp(1, 50))];
+    if ignore_ws {
+        v.push("-w".into());
+    }
+    v
+}
+
+fn with_opts<'a>(base: &[&'a str], opts: &'a [String], rest: &[&'a str]) -> Vec<&'a str> {
+    base.iter().copied().chain(opts.iter().map(String::as_str)).chain(rest.iter().copied()).collect()
+}
+
 #[tauri::command(async)]
-pub fn commit_diff(repo: String, hash: String, file: String) -> Res<Vec<DiffLine>> {
-    let out = git(&repo, &[&SHOW[..], &[&hash, "--", &file]].concat())?;
+pub fn commit_diff(repo: String, hash: String, file: String, context: u32, ignore_ws: bool) -> Res<Vec<DiffLine>> {
+    let opts = diff_opts(context, ignore_ws);
+    let out = git(&repo, &with_opts(&SHOW, &opts, &[&hash, "--", &file]))?;
     Ok(parse::parse_diff(&out))
 }
 
@@ -212,15 +228,17 @@ pub fn working_diff(
     file: String,
     staged: bool,
     untracked: bool,
+    context: u32,
 ) -> Res<Vec<DiffLine>> {
+    let opts = diff_opts(context, false);
     let out = if untracked {
         // --no-index exits with 1 when files differ, which is the normal case here
-        let out = run(&repo, &["diff", "--no-index", "--", "/dev/null", &file])?;
+        let out = run(&repo, &with_opts(&["diff", "--no-index"], &opts, &["--", "/dev/null", &file]))?;
         String::from_utf8_lossy(&out.stdout).into_owned()
     } else if staged {
-        git(&repo, &["diff", "--cached", "--no-renames", "--", &file])?
+        git(&repo, &with_opts(&["diff", "--cached", "--no-renames"], &opts, &["--", &file]))?
     } else {
-        git(&repo, &["diff", "--no-renames", "--", &file])?
+        git(&repo, &with_opts(&["diff", "--no-renames"], &opts, &["--", &file]))?
     };
     Ok(parse::parse_diff(&out))
 }
@@ -301,10 +319,16 @@ pub fn fetch(repo: String, background: bool) -> Res<()> {
     check(cmd.output().map_err(|e| e.to_string())?, &args).map(drop)
 }
 
-/// Fast-forward only: never creates a merge commit behind the user's back
+/// `mode` from the settings: "ff-only" (default: never creates a merge commit behind
+/// the user's back), "rebase" or "merge"
 #[tauri::command(async)]
-pub fn pull(repo: String) -> Res<()> {
-    git(&repo, &["pull", "--ff-only"]).map(drop)
+pub fn pull(repo: String, mode: String) -> Res<()> {
+    let flag = match mode.as_str() {
+        "rebase" => "--rebase",
+        "merge" => "--no-rebase",
+        _ => "--ff-only",
+    };
+    git(&repo, &["pull", flag]).map(drop)
 }
 
 #[tauri::command(async)]
@@ -659,6 +683,150 @@ pub fn repo_summary(repo: String, email: Option<String>) -> Res<RepoSummary> {
     })
 }
 
+// ---------- Settings: identity, editor, terminal ----------
+
+/// Changes the global `user.name` / `user.email`
+#[tauri::command(async)]
+pub fn set_user_info(name: String, email: String) -> Res<()> {
+    for (key, value) in [("user.name", name.trim()), ("user.email", email.trim())] {
+        if value.is_empty() {
+            // exit code 5 = key was not set: nothing to remove
+            let _ = git(".", &["config", "--global", "--unset", key]);
+        } else {
+            git(".", &["config", "--global", key, value])?;
+        }
+    }
+    Ok(())
+}
+
+/// Name and email used automatically for every repository inside `folder`
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct Identity {
+    folder: String,
+    name: String,
+    email: String,
+}
+
+/// Where our include files live: ~/.config/will-repo/identity-N.gitconfig
+fn identity_dir() -> Res<std::path::PathBuf> {
+    let home = std::env::var("USERPROFILE")
+        .or_else(|_| std::env::var("HOME"))
+        .map_err(|_| "Pasta do usuário não encontrada".to_string())?;
+    Ok(Path::new(&home).join(".config").join("will-repo"))
+}
+
+/// git's own feature: `[includeIf "gitdir/i:D:/Work/"] path = file` loads `file`
+/// (with user.name/email) only for repositories under D:/Work/.
+/// `scope` is ["--global"] in the app and ["-f", file] in tests.
+fn read_identities(scope: &[&str], dir: &Path) -> Vec<Identity> {
+    let dir = dir.to_string_lossy().replace('\\', "/");
+    let Ok(out) = git(".", &[&["config"], scope, &["--get-regexp", r"^includeif\..*\.path$"]].concat()) else {
+        return vec![];
+    };
+    out.lines()
+        .filter_map(|line| {
+            let (key, file) = line.split_once(' ')?;
+            // only the entries this app wrote
+            if !file.replace('\\', "/").starts_with(&dir) {
+                return None;
+            }
+            let folder = key.strip_prefix("includeif.gitdir/i:")?.strip_suffix(".path")?;
+            let get = |k: &str| git(".", &["config", "-f", file, k]).map(|v| v.trim().to_string()).unwrap_or_default();
+            Some(Identity { folder: folder.into(), name: get("user.name"), email: get("user.email") })
+        })
+        .collect()
+}
+
+/// Replaces every identity this app wrote with `list`
+fn write_identities(scope: &[&str], dir: &Path, list: &[Identity]) -> Res<()> {
+    for old in read_identities(scope, dir) {
+        let section = format!("includeIf.gitdir/i:{}", old.folder);
+        git(".", &[&["config"], scope, &["--remove-section", &section]].concat())?;
+    }
+    if let Ok(entries) = std::fs::read_dir(dir) {
+        for e in entries.flatten() {
+            if e.file_name().to_string_lossy().starts_with("identity-") {
+                let _ = std::fs::remove_file(e.path());
+            }
+        }
+    }
+    std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+    for (i, id) in list.iter().enumerate() {
+        let folder = id.folder.trim().replace('\\', "/");
+        if folder.is_empty() {
+            continue;
+        }
+        // trailing slash = every repository below the folder
+        let folder = if folder.ends_with('/') { folder } else { format!("{folder}/") };
+        let file = dir.join(format!("identity-{i}.gitconfig")).to_string_lossy().replace('\\', "/");
+        for (key, value) in [("user.name", id.name.trim()), ("user.email", id.email.trim())] {
+            if !value.is_empty() {
+                git(".", &["config", "-f", &file, key, value])?;
+            }
+        }
+        let key = format!("includeIf.gitdir/i:{folder}.path");
+        git(".", &[&["config"], scope, &[&key, &file]].concat())?;
+    }
+    Ok(())
+}
+
+#[tauri::command(async)]
+pub fn identities() -> Res<Vec<Identity>> {
+    Ok(read_identities(&["--global"], &identity_dir()?))
+}
+
+#[tauri::command(async)]
+pub fn set_identities(list: Vec<Identity>) -> Res<()> {
+    write_identities(&["--global"], &identity_dir()?, &list)
+}
+
+/// Starts a program without waiting for it. Windows: a name like "code" may be a
+/// .cmd script, which `Command` only finds with the extension (it escapes the
+/// arguments safely for .cmd files).
+fn spawn(program: &str, args: &[&str], dir: &str, console: bool) -> Res<()> {
+    let start = |p: &str| {
+        let mut cmd = Command::new(p);
+        cmd.args(args).current_dir(dir);
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            // a terminal needs its own console window; editors need none
+            cmd.creation_flags(if console { 0x0000_0010 } else { 0x0800_0000 });
+        }
+        #[cfg(not(windows))]
+        let _ = console;
+        cmd.spawn().map(drop)
+    };
+    match start(program) {
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound && cfg!(windows) && !program.contains('.') => {
+            start(&format!("{program}.cmd")).map_err(|_| format!("{program} não encontrado. Ele está no PATH?"))
+        }
+        r => r.map_err(|e| format!("Não foi possível abrir {program}: {e}")),
+    }
+}
+
+/// Opens a file or folder of the repo in the editor chosen in the settings (e.g. "code")
+#[tauri::command(async)]
+pub fn open_in_editor(repo: String, path: String, editor: String) -> Res<()> {
+    let full = Path::new(&repo).join(&path);
+    spawn(editor.trim(), &[&full.to_string_lossy()], &repo, false)
+}
+
+/// "wt" (Windows Terminal), "powershell", "pwsh", "cmd" or "git-bash", opened in the repo folder
+#[tauri::command(async)]
+pub fn open_terminal(repo: String, terminal: String) -> Res<()> {
+    match terminal.as_str() {
+        "wt" => spawn("wt", &["-d", &repo], &repo, false),
+        "powershell" | "pwsh" | "cmd" => spawn(&terminal, &[], &repo, true),
+        "git-bash" => {
+            let bash = std::env::var("ProgramFiles").unwrap_or_else(|_| r"C:\Program Files".into()) + r"\Git\git-bash.exe";
+            spawn(&bash, &[&format!("--cd={repo}")], &repo, false)
+        }
+        other => Err(format!("Terminal desconhecido: {other}")),
+    }
+}
+
 // ---------- Stash ----------
 
 #[tauri::command(async)]
@@ -715,8 +883,9 @@ pub fn stash_files(repo: String, name: String) -> Res<Vec<FileChange>> {
 }
 
 #[tauri::command(async)]
-pub fn stash_diff(repo: String, name: String, file: String) -> Res<Vec<DiffLine>> {
-    let full = git(&repo, &[&STASH_SHOW[..], &["-p", &name]].concat())?;
+pub fn stash_diff(repo: String, name: String, file: String, context: u32, ignore_ws: bool) -> Res<Vec<DiffLine>> {
+    let opts = diff_opts(context, ignore_ws);
+    let full = git(&repo, &with_opts(&STASH_SHOW, &opts, &["-p", &name]))?;
     Ok(parse::parse_diff(&parse::file_section(&full, &file)))
 }
 
@@ -831,6 +1000,7 @@ pub fn apply_hunk(
     hunk: usize,
     lines: Option<Vec<usize>>,
     action: HunkAction,
+    context: u32,
 ) -> Res<()> {
     let (diff_args, apply_args): (&[&str], &[&str]) = match action {
         HunkAction::Stage => (&["diff", "--no-renames"], &["apply", "--cached"]),
@@ -840,7 +1010,9 @@ pub fn apply_hunk(
         ),
         HunkAction::Discard => (&["diff", "--no-renames"], &["apply", "--reverse"]),
     };
-    let diff = git(&repo, &[diff_args, &["--", &file]].concat())?;
+    // same -U as the diff the user saw, so hunk numbers and lines match
+    let opts = diff_opts(context, false);
+    let diff = git(&repo, &with_opts(diff_args, &opts, &["--", &file]))?;
     let patch = match &lines {
         None => parse::hunk_patch(&diff, hunk),
         Some(l) => parse::lines_patch(&diff, hunk, l, !matches!(action, HunkAction::Stage)),
@@ -882,7 +1054,7 @@ mod tests {
 
         create_branch(r(), "feature/x".into(), true).unwrap();
         std::fs::write(dir.join("a.txt"), "one\ntwo\n").unwrap();
-        let d = working_diff(r(), "a.txt".into(), false, false).unwrap();
+        let d = working_diff(r(), "a.txt".into(), false, false, 3).unwrap();
         assert!(d
             .iter()
             .any(|l| l.kind == parse::DiffKind::Add && l.text == "two"));
@@ -932,17 +1104,17 @@ mod tests {
         edited[19] = "LAST".into();
         std::fs::write(dir.join("long.txt"), edited.join("\n") + "\n").unwrap();
 
-        apply_hunk(r(), "long.txt".into(), 1, None, HunkAction::Stage).unwrap();
+        apply_hunk(r(), "long.txt".into(), 1, None, HunkAction::Stage, 3).unwrap();
         let staged = git(&repo, &["diff", "--cached"]).unwrap();
         assert!(staged.contains("+LAST") && !staged.contains("+FIRST"));
 
-        apply_hunk(r(), "long.txt".into(), 0, None, HunkAction::Unstage).unwrap();
+        apply_hunk(r(), "long.txt".into(), 0, None, HunkAction::Unstage, 3).unwrap();
         assert!(git(&repo, &["diff", "--cached"]).unwrap().is_empty());
 
-        apply_hunk(r(), "long.txt".into(), 0, None, HunkAction::Discard).unwrap();
+        apply_hunk(r(), "long.txt".into(), 0, None, HunkAction::Discard, 3).unwrap();
         let left = git(&repo, &["diff"]).unwrap();
         assert!(left.contains("+LAST") && !left.contains("+FIRST"));
-        assert!(apply_hunk(r(), "long.txt".into(), 5, None, HunkAction::Stage).is_err());
+        assert!(apply_hunk(r(), "long.txt".into(), 5, None, HunkAction::Stage, 3).is_err());
 
         // Line staging: both lines change, stage only the first one
         std::fs::write(dir.join("pair.txt"), "x\ny\n").unwrap();
@@ -955,7 +1127,7 @@ mod tests {
             "pair.txt".into(),
             0,
             Some(vec![0, 2]),
-            HunkAction::Stage,
+            HunkAction::Stage, 3
         )
         .unwrap();
         assert_eq!(git(&repo, &["show", ":pair.txt"]).unwrap(), "X\ny\n");
@@ -965,7 +1137,7 @@ mod tests {
             "pair.txt".into(),
             0,
             Some(vec![0, 1]),
-            HunkAction::Unstage,
+            HunkAction::Unstage, 3
         )
         .unwrap();
         assert_eq!(git(&repo, &["show", ":pair.txt"]).unwrap(), "x\ny\n");
@@ -975,7 +1147,7 @@ mod tests {
             "pair.txt".into(),
             0,
             Some(vec![1, 3]),
-            HunkAction::Discard,
+            HunkAction::Discard, 3
         )
         .unwrap();
         assert_eq!(
@@ -996,7 +1168,7 @@ mod tests {
         let files = stash_files(r(), "stash@{0}".into()).unwrap();
         let paths: Vec<_> = files.iter().map(|f| f.path.as_str()).collect();
         assert_eq!(paths, vec!["extra.txt", "long.txt"]);
-        let d = stash_diff(r(), "stash@{0}".into(), "long.txt".into()).unwrap();
+        let d = stash_diff(r(), "stash@{0}".into(), "long.txt".into(), 3, false).unwrap();
         assert!(d.iter().any(|l| l.text == "LAST"));
         stash_action(r(), "stash@{0}".into(), StashAction::Pop).unwrap();
         assert!(stash_list(r()).unwrap().is_empty());
@@ -1208,7 +1380,7 @@ mod tests {
         assert!(!dir.join("g.txt").exists());
 
         // hunk discard is backed up too, newest first
-        apply_hunk(r(), "f.txt".into(), 0, None, HunkAction::Discard).unwrap();
+        apply_hunk(r(), "f.txt".into(), 0, None, HunkAction::Discard, 3).unwrap();
         assert_eq!(read("f.txt"), "base\n");
         let list = discard_list(r()).unwrap();
         assert_eq!((list.len(), list[0].files.as_slice()), (2, &["f.txt".to_string()][..]));
@@ -1234,6 +1406,66 @@ mod tests {
         assert!(!dir.join("a.txt").exists());
         restore_discard(repo.clone(), discard_list(repo.clone()).unwrap()[0].hash.clone()).unwrap();
         assert!(dir.join("a.txt").exists());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn identities_per_folder() {
+        let (dir, repo) = temp_repo("identity");
+        let cfg = dir.join("global.gitconfig");
+        let cfg_s = cfg.to_string_lossy().into_owned();
+        let scope = ["-f", cfg_s.as_str()];
+        let ids_dir = dir.join("ids");
+        std::fs::write(&cfg, "[user]\n\tname = Global\n").unwrap();
+
+        let work = Identity { folder: repo.clone(), name: "Will Trabalho".into(), email: "will@empresa.com".into() };
+        write_identities(&scope, &ids_dir, &[work.clone()]).unwrap();
+        let read = read_identities(&scope, &ids_dir);
+        assert_eq!(read.len(), 1);
+        assert_eq!((read[0].name.as_str(), read[0].email.as_str()), ("Will Trabalho", "will@empresa.com"));
+        assert!(read[0].folder.ends_with('/'));
+
+        // git really uses it inside the folder (GIT_CONFIG_GLOBAL = our test file)
+        let email = |path: &str| {
+            let out = command(path, &["config", "user.email"]).env("GIT_CONFIG_GLOBAL", &cfg).output().unwrap();
+            String::from_utf8_lossy(&out.stdout).trim().to_string()
+        };
+        // the repo's own config wins over includes, so drop the one temp_repo set
+        git(&repo, &["config", "--unset", "user.email"]).unwrap();
+        assert_eq!(email(&repo), "will@empresa.com");
+
+        // rewriting replaces ours and keeps the user's own settings
+        write_identities(&scope, &ids_dir, &[]).unwrap();
+        assert!(read_identities(&scope, &ids_dir).is_empty());
+        assert_eq!(email(&repo), "");
+        assert!(std::fs::read_to_string(&cfg).unwrap().contains("Global"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn diff_options_and_pull_modes() {
+        let (dir, repo) = temp_repo("opts");
+        let r = || repo.clone();
+        let lines: Vec<String> = (1..=10).map(|n| format!("line {n}")).collect();
+        std::fs::write(dir.join("f.txt"), lines.join("\n") + "\n").unwrap();
+        git(&repo, &["commit", "-qam", "ten"]).unwrap();
+        let mut edited = lines.clone();
+        edited[4] = "line  5".into(); // whitespace only
+        std::fs::write(dir.join("f.txt"), edited.join("\n") + "\n").unwrap();
+
+        let ctx = |n| working_diff(r(), "f.txt".into(), false, false, n).unwrap().iter().filter(|l| l.kind == parse::DiffKind::Ctx).count();
+        assert_eq!((ctx(1), ctx(3)), (2, 6));
+        // hunks still apply with a smaller context
+        apply_hunk(r(), "f.txt".into(), 0, None, HunkAction::Stage, 1).unwrap();
+        git(&repo, &["commit", "-qm", "ws"]).unwrap();
+        let head = git(&repo, &["rev-parse", "HEAD"]).unwrap().trim().to_string();
+        assert!(!commit_diff(r(), head.clone(), "f.txt".into(), 3, false).unwrap().is_empty());
+        assert!(commit_diff(r(), head, "f.txt".into(), 3, true).unwrap().iter().all(|l| l.kind != parse::DiffKind::Add));
+
+        // no upstream: every mode fails with git's message, none hangs
+        for mode in ["ff-only", "rebase", "merge"] {
+            assert!(pull(r(), mode.into()).is_err());
+        }
         let _ = std::fs::remove_dir_all(&dir);
     }
 

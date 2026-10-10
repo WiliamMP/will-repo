@@ -16,7 +16,6 @@ Lista de próximas funcionalidades do will-repo. Tamanho estimado entre parênte
 
 ## Conforto
 
-- [ ] **Tela de configurações**: tema, intervalo do fetch, editor externo, nome e email do git. (médio)
 - [ ] **Paleta de comandos (Ctrl+K)** para executar qualquer ação pelo teclado. (médio)
 - [ ] **Virtualizar o diff** para arquivos muito grandes (hoje marcado com `ponytail:` em `DiffView.tsx`). (pequeno)
 
@@ -57,7 +56,6 @@ Recursos inspirados no Sourcetree, no GitKraken e no Fork, repensados para o est
 ### Commits
 
 - [ ] **Mensagem de commit sugerida por IA** [GitKraken]: gerar a mensagem a partir do diff preparado, com Claude. (médio)
-- [ ] **Identidade por pasta** [perfis do GitKraken]: usar nome e email de trabalho ou pessoal automaticamente conforme a pasta do repositório. (pequeno)
 - [ ] **Assinatura GPG/SSH** [Fork]: assinar commits e mostrar o selo "verificado" no histórico. (médio)
 
 ### Fluxos e estrutura
@@ -88,3 +86,4 @@ Recursos inspirados no Sourcetree, no GitKraken e no Fork, repensados para o est
 - [x] Assistente de mensagem: chips de Conventional Commits, mensagens recentes e contador do título
 - [x] Links de issues: #123 no título e no corpo do commit abre no GitHub; detalhes mostram o corpo da mensagem
 - [x] Fetch automático a cada 5 minutos, com aviso e botão de Pull quando chegam commits novos
+- [x] Tela de configurações no estilo do Discord: conta, identidade (global e por pasta), aparência (tema, zoom), git (fetch automático, modo do pull), diff (contexto, espaços), integrações (editor, terminal), atalhos e sobre

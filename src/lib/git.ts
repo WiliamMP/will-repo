@@ -1,6 +1,9 @@
 // Typed wrappers around the Rust commands in src-tauri/src/git.rs.
 // invoke() ≈ calling a function in a DLL: name + params in, JSON out.
 import { invoke } from "@tauri-apps/api/core";
+import { openPath } from "@tauri-apps/plugin-opener";
+import { toast } from "sonner";
+import { getSettings } from "@/hooks/use-settings";
 
 export type RefKind = "head" | "branch" | "remote" | "tag";
 export type RefLabel = { name: string; kind: RefKind };
@@ -34,6 +37,8 @@ export type RepoState = {
 };
 
 export type UserInfo = { name: string | null; email: string | null };
+/** name/email used for every repository inside `folder` */
+export type Identity = { folder: string; name: string; email: string };
 export type RepoSummary = {
   path: string;
   name: string;
@@ -87,6 +92,13 @@ export type DiffLine = {
 export const git = {
   openRepo: (path: string) => invoke<RepoInfo>("open_repo", { path }),
   userInfo: () => invoke<UserInfo>("user_info"),
+  setUserInfo: (name: string, email: string) => invoke<void>("set_user_info", { name, email }),
+  identities: () => invoke<Identity[]>("identities"),
+  setIdentities: (list: Identity[]) => invoke<void>("set_identities", { list }),
+  /** `path` relative to the repo ("" = the repo folder) */
+  openInEditor: (repo: string, path: string) =>
+    invoke<void>("open_in_editor", { repo, path, editor: getSettings().editor }),
+  openTerminal: (repo: string) => invoke<void>("open_terminal", { repo, terminal: getSettings().terminal }),
   githubProfile: () => invoke<GithubProfile>("github_profile"),
   githubDeviceStart: () => invoke<DeviceCode>("github_device_start"),
   githubDevicePoll: (deviceCode: string) => invoke<"pending" | "slow_down" | "done">("github_device_poll", { deviceCode }),
@@ -103,9 +115,16 @@ export const git = {
   tracking: (repo: string) => invoke<Tracking>("tracking", { repo }),
   state: (repo: string) => invoke<RepoState>("repo_state", { repo }),
   commitFiles: (repo: string, hash: string) => invoke<FileChange[]>("commit_files", { repo, hash }),
-  commitDiff: (repo: string, hash: string, file: string) => invoke<DiffLine[]>("commit_diff", { repo, hash, file }),
+  commitDiff: (repo: string, hash: string, file: string) =>
+    invoke<DiffLine[]>("commit_diff", { repo, hash, file, ...readOnlyDiff() }),
   workingDiff: (repo: string, file: FileChange, staged: boolean) =>
-    invoke<DiffLine[]>("working_diff", { repo, file: file.path, staged, untracked: file.status === "?" }),
+    invoke<DiffLine[]>("working_diff", {
+      repo,
+      file: file.path,
+      staged,
+      untracked: file.status === "?",
+      context: getSettings().diffContext,
+    }),
   stage: (repo: string, files: string[]) => invoke<void>("stage", { repo, files }),
   unstage: (repo: string, files: string[]) => invoke<void>("unstage", { repo, files }),
   discard: (repo: string, files: FileChange[]) => invoke<void>("discard", { repo, files }),
@@ -125,7 +144,7 @@ export const git = {
   pushTag: (repo: string, name: string) => invoke<void>("push_tag", { repo, name }),
   /** background: never opens a login window (auto fetch) */
   fetch: (repo: string, background: boolean) => invoke<void>("fetch", { repo, background }),
-  pull: (repo: string) => invoke<void>("pull", { repo }),
+  pull: (repo: string) => invoke<void>("pull", { repo, mode: getSettings().pullMode }),
   push: (repo: string) => invoke<void>("push", { repo }),
   checkout: (repo: string, branch: string, remote: boolean) => invoke<void>("checkout", { repo, branch, remote }),
   createBranch: (repo: string, name: string, checkout: boolean) => invoke<void>("create_branch", { repo, name, checkout }),
@@ -141,11 +160,26 @@ export const git = {
   stashPush: (repo: string, message: string, untracked: boolean) => invoke<void>("stash_push", { repo, message, untracked }),
   stashAction: (repo: string, name: string, action: StashAction) => invoke<void>("stash_action", { repo, name, action }),
   stashFiles: (repo: string, name: string) => invoke<FileChange[]>("stash_files", { repo, name }),
-  stashDiff: (repo: string, name: string, file: string) => invoke<DiffLine[]>("stash_diff", { repo, name, file }),
+  stashDiff: (repo: string, name: string, file: string) =>
+    invoke<DiffLine[]>("stash_diff", { repo, name, file, ...readOnlyDiff() }),
   /** `lines` = body line indexes inside the hunk; omit to apply the whole hunk */
   applyHunk: (repo: string, file: string, hunk: number, action: HunkAction, lines?: number[]) =>
-    invoke<void>("apply_hunk", { repo, file, hunk, action, lines: lines ?? null }),
+    invoke<void>("apply_hunk", { repo, file, hunk, action, lines: lines ?? null, context: getSettings().diffContext }),
 };
+
+/** diff options for history/stash diffs (they are never applied back, so whitespace can be ignored) */
+function readOnlyDiff() {
+  const s = getSettings();
+  return { context: s.diffContext, ignoreWs: s.ignoreWhitespace };
+}
+
+/** Opens a repo file ("" = the folder) in the editor from the settings, or with the default app */
+export function openInEditor(repo: string, path: string) {
+  const open = getSettings().editor.trim()
+    ? git.openInEditor(repo, path)
+    : openPath(path ? `${repo}/${path}` : repo);
+  return open.catch((e) => toast.error(String(e)));
+}
 
 const rtf = new Intl.RelativeTimeFormat("pt-BR", { numeric: "auto" });
 

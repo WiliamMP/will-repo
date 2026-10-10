@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import type { LucideIcon } from "lucide-react";
 import {
   AlertTriangle,
+  Code2,
+  SquareTerminal,
   Archive,
   ArchiveRestore,
   ArrowDown,
@@ -35,10 +37,8 @@ import { StashDialog } from "@/components/StashDialog";
 import { TagDialog } from "@/components/TagDialog";
 import { WorkingTree } from "@/components/WorkingTree";
 import { useRepo, type RepoApi } from "@/hooks/use-repo";
-import { git, type Commit, type OpAction } from "@/lib/git";
-
-// ponytail: fixed interval, make it a setting when the settings screen exists
-const AUTO_FETCH_MINUTES = 5;
+import { useSettings } from "@/hooks/use-settings";
+import { git, openInEditor, type Commit, type OpAction } from "@/lib/git";
 
 const confirm = (message: string, title: string, okLabel: string) =>
   ask(message, { title, kind: "warning", okLabel, cancelLabel: "Cancelar" });
@@ -73,11 +73,13 @@ export function RepoView({ path }: { path: string }) {
   const pull = () => run("pull", git.pull, "Pull concluído");
   const push = () => run("push", git.push, "Push concluído");
 
+  const { autoFetchMinutes } = useSettings();
   // Background fetch every few minutes (only the open tab is mounted, so only it fetches).
   // The interval callback reads `latest` because its closure would keep old state.
   const latest = useRef({ busy, behind: 0 });
   latest.current = { busy, behind: data?.tracking.behind ?? 0 };
   useEffect(() => {
+    if (!autoFetchMinutes) return; // turned off in the settings
     const id = setInterval(async () => {
       if (latest.current.busy || document.hidden) return;
       const before = latest.current.behind;
@@ -93,9 +95,9 @@ export function RepoView({ path }: { path: string }) {
           duration: 15000,
           action: { label: "Pull", onClick: () => run("pull", git.pull, "Pull concluído") },
         });
-    }, AUTO_FETCH_MINUTES * 60_000);
+    }, autoFetchMinutes * 60_000);
     return () => clearInterval(id);
-  }, [path, reload, run]);
+  }, [path, reload, run, autoFetchMinutes]);
 
   // Keyboard shortcuts (like TActionList shortcuts in Delphi)
   useEffect(() => {
@@ -214,6 +216,26 @@ export function RepoView({ path }: { path: string }) {
             disabled={!!busy}
             onCreate={(name, checkout) => run("branch", (p) => git.createBranch(p, name, checkout), `Branch ${name} criada`)}
           />
+        </div>
+        <div className="ml-auto flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-muted-foreground"
+            title="Abrir a pasta no editor (Configurações > Integrações)"
+            onClick={() => openInEditor(repo.path, "")}
+          >
+            <Code2 /> Editor
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-muted-foreground"
+            title="Abrir um terminal na pasta (Configurações > Integrações)"
+            onClick={() => git.openTerminal(repo.path).catch((e) => toast.error(String(e)))}
+          >
+            <SquareTerminal /> Terminal
+          </Button>
         </div>
       </header>
 

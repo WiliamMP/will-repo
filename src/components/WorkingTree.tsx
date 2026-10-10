@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { Check, ExternalLink, GitCommitHorizontal, Minus, Plus, Undo2 } from "lucide-react";
 import { ask } from "@tauri-apps/plugin-dialog";
-import { openPath } from "@tauri-apps/plugin-opener";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -15,7 +14,7 @@ import { ConflictView, sideNames } from "@/components/ConflictView";
 import { DiffView } from "@/components/DiffView";
 import { DiscardsDialog } from "@/components/DiscardsDialog";
 import { FileList } from "@/components/FileList";
-import { git, type DiffLine, type FileChange, type HunkAction, type RepoState, type Status } from "@/lib/git";
+import { git, openInEditor, type DiffLine, type FileChange, type HunkAction, type RepoState, type Status } from "@/lib/git";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -163,9 +162,7 @@ export function WorkingTree({ repo, status, state, headPushed, recent, run }: Pr
               onSelect={(file) => setPick({ file, list: "conflicted" })}
               actions={(f) => (
                 <>
-                  {iconBtn("Abrir no editor", <ExternalLink />, () =>
-                    openPath(`${repo}/${f.path}`).catch((e) => toast.error(String(e))),
-                  )}
+                  {iconBtn("Abrir no editor", <ExternalLink />, () => openInEditor(repo, f.path))}
                   <Button variant="ghost" size="xs" title={`Arquivo inteiro: ${names.ours}`} onClick={(e) => {
                     e.stopPropagation();
                     resolveFile(f, "ours");
