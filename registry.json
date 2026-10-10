@@ -1,0 +1,196 @@
+{
+  "$schema": "https://ui.shadcn.com/schema/registry.json",
+  "name": "neon",
+  "homepage": "https://github.com/WiliamMP/will-repo",
+  "items": [
+    {
+      "name": "neon-theme",
+      "type": "registry:theme",
+      "title": "Neon",
+      "description": "Tema Neon do will-repo: roxo neon, claro e escuro, cores extras (sucesso, aviso, diff, lanes) e brilho.",
+      "cssVars": {
+        "theme": {
+          "font-sans": "'Geist Variable', 'Segoe UI Variable', sans-serif",
+          "font-mono": "'Geist Mono Variable', 'Cascadia Code', monospace",
+          "color-success": "var(--success)",
+          "color-warning": "var(--warning)",
+          "color-diff-add": "var(--diff-add)",
+          "color-diff-del": "var(--diff-del)",
+          "color-glow": "var(--glow)",
+          "color-lane-1": "var(--lane-1)",
+          "color-lane-2": "var(--lane-2)",
+          "color-lane-3": "var(--lane-3)",
+          "color-lane-4": "var(--lane-4)",
+          "color-lane-5": "var(--lane-5)",
+          "color-lane-6": "var(--lane-6)"
+        },
+        "light": {
+          "background": "#f7f8fb",
+          "foreground": "#1a1d26",
+          "card": "#ffffff",
+          "card-foreground": "#1a1d26",
+          "popover": "#ffffff",
+          "popover-foreground": "#1a1d26",
+          "primary": "#6a46ff",
+          "primary-foreground": "#ffffff",
+          "secondary": "#eef0f5",
+          "secondary-foreground": "#1a1d26",
+          "muted": "#e8ebf2",
+          "muted-foreground": "#5d6478",
+          "accent": "#ece8ff",
+          "accent-foreground": "#4a2fd0",
+          "destructive": "#e0244a",
+          "border": "#e1e4ec",
+          "input": "#c9cedb",
+          "ring": "#6a46ff",
+          "radius": "0.5rem",
+          "sidebar": "#eef0f5",
+          "sidebar-foreground": "#1a1d26",
+          "sidebar-primary": "#6a46ff",
+          "sidebar-primary-foreground": "#ffffff",
+          "sidebar-accent": "#ece8ff",
+          "sidebar-accent-foreground": "#4a2fd0",
+          "sidebar-border": "#e1e4ec",
+          "sidebar-ring": "#6a46ff",
+          "success": "#16a46c",
+          "warning": "#c77d00",
+          "diff-add": "rgb(22 164 108 / 0.12)",
+          "diff-del": "rgb(224 36 74 / 0.1)",
+          "glow": "transparent",
+          "lane-1": "#6a46ff",
+          "lane-2": "#0094c6",
+          "lane-3": "#16a46c",
+          "lane-4": "#d98a00",
+          "lane-5": "#e0244a",
+          "lane-6": "#c83fb3",
+          "heat-0": "#eef0f5",
+          "heat-1": "#b9a8ff",
+          "heat-2": "#8f74ff",
+          "heat-3": "#6a46ff",
+          "heat-4": "#3f22b8",
+          "chart-1": "var(--lane-1)",
+          "chart-2": "var(--lane-2)",
+          "chart-3": "var(--lane-3)",
+          "chart-4": "var(--lane-4)",
+          "chart-5": "var(--lane-5)"
+        },
+        "dark": {
+          "background": "#0f1117",
+          "foreground": "#e6e8ef",
+          "card": "#161922",
+          "card-foreground": "#e6e8ef",
+          "popover": "#161922",
+          "popover-foreground": "#e6e8ef",
+          "primary": "#7c5cff",
+          "primary-foreground": "#ffffff",
+          "secondary": "#1e2230",
+          "secondary-foreground": "#e6e8ef",
+          "muted": "#1e2230",
+          "muted-foreground": "#8b91a5",
+          "accent": "#221d3d",
+          "accent-foreground": "#c4b5ff",
+          "destructive": "#ff5c7a",
+          "border": "#252a38",
+          "input": "#343b4f",
+          "ring": "#7c5cff",
+          "sidebar": "#0b0d12",
+          "sidebar-foreground": "#e6e8ef",
+          "sidebar-primary": "#7c5cff",
+          "sidebar-primary-foreground": "#ffffff",
+          "sidebar-accent": "#221d3d",
+          "sidebar-accent-foreground": "#c4b5ff",
+          "sidebar-border": "#252a38",
+          "sidebar-ring": "#7c5cff",
+          "success": "#3ddc97",
+          "warning": "#ffb547",
+          "diff-add": "rgb(61 220 151 / 0.12)",
+          "diff-del": "rgb(255 92 122 / 0.12)",
+          "glow": "rgb(124 92 255 / 0.55)",
+          "lane-1": "#7c5cff",
+          "lane-2": "#00d4ff",
+          "lane-3": "#3ddc97",
+          "lane-4": "#ffb547",
+          "lane-5": "#ff5c7a",
+          "lane-6": "#ff7ae6",
+          "heat-0": "#1e2230",
+          "heat-1": "#4b3aa3",
+          "heat-2": "#6a4fe0",
+          "heat-3": "#8f74ff",
+          "heat-4": "#c4b5ff"
+        }
+      },
+      "dependencies": [
+        "@fontsource-variable/geist",
+        "@fontsource-variable/geist-mono"
+      ]
+    },
+    {
+      "name": "neon-border-beam",
+      "type": "registry:ui",
+      "title": "Border Beam",
+      "description": "Feixe de luz animado percorrendo a borda (Magic UI).",
+      "dependencies": [
+        "motion"
+      ],
+      "files": [
+        {
+          "path": "src/components/ui/border-beam.tsx",
+          "type": "registry:ui"
+        }
+      ]
+    },
+    {
+      "name": "neon-shimmer-button",
+      "type": "registry:ui",
+      "title": "Shimmer Button",
+      "description": "Botão com brilho girando na borda (Magic UI).",
+      "dependencies": [],
+      "files": [
+        {
+          "path": "src/components/ui/shimmer-button.tsx",
+          "type": "registry:ui"
+        }
+      ]
+    },
+    {
+      "name": "neon-animated-shiny-text",
+      "type": "registry:ui",
+      "title": "Animated Shiny Text",
+      "description": "Texto com reflexo passando (Magic UI).",
+      "dependencies": [],
+      "files": [
+        {
+          "path": "src/components/ui/animated-shiny-text.tsx",
+          "type": "registry:ui"
+        }
+      ]
+    },
+    {
+      "name": "neon-dot-pattern",
+      "type": "registry:ui",
+      "title": "Dot Pattern",
+      "description": "Fundo de pontos para estados vazios (Magic UI).",
+      "dependencies": [],
+      "files": [
+        {
+          "path": "src/components/ui/dot-pattern.tsx",
+          "type": "registry:ui"
+        }
+      ]
+    },
+    {
+      "name": "neon",
+      "type": "registry:block",
+      "title": "Neon (tudo)",
+      "description": "Tema Neon e os componentes animados de uma vez.",
+      "registryDependencies": [
+        "{{url}}/neon-theme.json",
+        "{{url}}/neon-border-beam.json",
+        "{{url}}/neon-shimmer-button.json",
+        "{{url}}/neon-animated-shiny-text.json",
+        "{{url}}/neon-dot-pattern.json"
+      ],
+      "files": []
+    }
+  ]
+}

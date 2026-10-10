@@ -20,7 +20,7 @@ Lista de próximas funcionalidades do will-repo. Tamanho estimado entre parênte
 
 ## Design system
 
-- [ ] **Registry shadcn com o tema Neon**, para reutilizar o mesmo estilo nos outros apps (`npx shadcn add <url>`). (médio)
+- [ ] **Publicar o registry Neon**: os arquivos já são gerados com `npm run registry` (em `registry-dist/`); falta hospedar num lugar público (repositório público ou GitHub Pages) para usar `npx shadcn add <url>/neon.json`. (trivial)
 
 ## Ideias das referências, com o toque do will-repo
 
@@ -74,3 +74,4 @@ Recursos inspirados no Sourcetree, no GitKraken e no Fork, repensados para o est
 - [x] Clonar repositório (lista dos seus repos do GitHub ou URL) e grupos de projetos no dashboard com "Fetch em todos"
 - [x] CI no GitHub Actions (typecheck, build, cargo test no Windows); mensagem de commit sugerida pelo Claude (Claude Code CLI, sem chave de API)
 - [x] Assinatura de commits (SSH ou GPG) com selo "Verificado"; compartilhar alterações como Gist secreto
+- [x] Registry shadcn "Neon" gerado do próprio tema (`npm run registry`): tema claro/escuro, cores extras e componentes Magic UI; testado instalando num projeto Vite novo
