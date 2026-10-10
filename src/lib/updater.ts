@@ -37,7 +37,8 @@ export async function checkForUpdate(quiet: boolean): Promise<string | null> {
       return null;
     }
     toast.info(`Nova versão ${update.version} disponível`, {
-      description: update.body?.split("\n")[0],
+      // the release notes talk to people downloading the installer; here the app does it all
+      description: "Clique em Atualizar: o app baixa, instala e reinicia sozinho.",
       duration: Infinity,
       action: { label: "Atualizar", onClick: () => install(update) },
     });
