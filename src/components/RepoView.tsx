@@ -6,6 +6,7 @@ import {
   ArrowDownToLine,
   ArrowUpFromLine,
   Code2,
+  FolderOpen,
   GitBranch,
   History as HistoryIcon,
   Loader2,
@@ -14,6 +15,7 @@ import {
   Trash2,
   Undo2,
 } from "lucide-react";
+import { openPath, openUrl } from "@tauri-apps/plugin-opener";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -21,6 +23,7 @@ import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/componen
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BranchDialog } from "@/components/BranchDialog";
 import { CommitDetails, StashDetails } from "@/components/CommitDetails";
+import { Github } from "@/components/Dashboard";
 import { FileBrowser } from "@/components/FileBrowser";
 import { History } from "@/components/History";
 import { PullRequests } from "@/components/PullRequests";
@@ -169,6 +172,14 @@ export function RepoView({ path, onOpenRepo }: RepoViewProps) {
           <Button variant="ghost" size="icon-sm" className="text-muted-foreground" title="Máquina do tempo: tudo por onde o HEAD passou" onClick={() => panels.setTimeMachine(true)}>
             <HistoryIcon />
           </Button>
+          <Button variant="ghost" size="icon-sm" className="text-muted-foreground" title="Abrir a pasta no Explorer" onClick={() => openPath(repo.path).catch((e) => toast.error(String(e)))}>
+            <FolderOpen />
+          </Button>
+          {github && (
+            <Button variant="ghost" size="icon-sm" className="text-muted-foreground" title={`Abrir no GitHub (${github})`} onClick={() => openUrl(github)}>
+              <Github />
+            </Button>
+          )}
           <Button variant="ghost" size="sm" className="text-muted-foreground" title="Abrir a pasta no editor (Configurações > Integrações)" onClick={() => openInEditor(repo.path, "")}>
             <Code2 /> Editor
           </Button>

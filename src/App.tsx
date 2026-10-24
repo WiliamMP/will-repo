@@ -21,9 +21,12 @@ import {
   XSquare,
 } from "lucide-react";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
+import { openPath, openUrl } from "@tauri-apps/plugin-opener";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger } from "@/components/ui/context-menu";
+import { Github } from "@/components/Dashboard";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Dashboard } from "@/components/Dashboard";
@@ -224,29 +227,51 @@ export default function App({ gitError }: { gitError: string | null }) {
           </button>
           <div className="flex min-w-0 items-end gap-1 overflow-x-auto">
             {tabs.paths.map((p) => (
-              <div
-                key={p}
-                title={p}
-                onClick={() => setTabs((t) => ({ ...t, active: p }))}
-                onAuxClick={(e) => e.button === 1 && close(p)}
-                className={cn(
-                  "group flex h-8 max-w-52 shrink-0 cursor-pointer items-center gap-2 rounded-t-md border border-b-0 border-transparent px-3 text-muted-foreground hover:text-foreground",
-                  p === tabs.active && "border-border bg-card text-foreground shadow-[inset_0_2px_0_var(--primary)]",
-                )}
-              >
-                <FolderGit2 className="size-3.5 shrink-0" />
-                <span className="truncate">{baseName(p)}</span>
-                <button
-                  aria-label={`Fechar ${baseName(p)}`}
-                  className="rounded p-0.5 opacity-0 group-hover:opacity-100 hover:bg-muted"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    close(p);
-                  }}
-                >
-                  <X className="size-3" />
-                </button>
-              </div>
+              <ContextMenu key={p}>
+                <ContextMenuTrigger asChild>
+                  <div
+                    title={p}
+                    onClick={() => setTabs((t) => ({ ...t, active: p }))}
+                    onAuxClick={(e) => e.button === 1 && close(p)}
+                    className={cn(
+                      "group flex h-8 max-w-52 shrink-0 cursor-pointer items-center gap-2 rounded-t-md border border-b-0 border-transparent px-3 text-muted-foreground hover:text-foreground",
+                      p === tabs.active && "border-border bg-card text-foreground shadow-[inset_0_2px_0_var(--primary)]",
+                    )}
+                  >
+                    <FolderGit2 className="size-3.5 shrink-0" />
+                    <span className="truncate">{baseName(p)}</span>
+                    <button
+                      aria-label={`Fechar ${baseName(p)}`}
+                      className="rounded p-0.5 opacity-0 group-hover:opacity-100 hover:bg-muted"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        close(p);
+                      }}
+                    >
+                      <X className="size-3" />
+                    </button>
+                  </div>
+                </ContextMenuTrigger>
+                <ContextMenuContent>
+                  <ContextMenuItem onSelect={() => openPath(p).catch((e) => toast.error(String(e)))}>
+                    <FolderOpen /> Abrir pasta
+                  </ContextMenuItem>
+                  <ContextMenuItem
+                    onSelect={() =>
+                      git.githubUrl(p).then(
+                        (url) => void (url ? openUrl(url) : toast.info("O origin deste repositório não está no GitHub")),
+                        (e) => toast.error(String(e)),
+                      )
+                    }
+                  >
+                    <Github /> Abrir no GitHub
+                  </ContextMenuItem>
+                  <ContextMenuSeparator />
+                  <ContextMenuItem onSelect={() => close(p)}>
+                    <X /> Fechar aba
+                  </ContextMenuItem>
+                </ContextMenuContent>
+              </ContextMenu>
             ))}
           </div>
           <Button
