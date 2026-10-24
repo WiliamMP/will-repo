@@ -119,6 +119,26 @@ export function Dashboard({ repos, openTabs, onOpen, onPick, onForget }: Props) 
     else toast.success(`${group.name}: fetch concluído`);
     setVersion((v) => v + 1);
   };
+  // drag a card onto a group (or "Sem grupo"); custom type so dragged text/files are ignored
+  const DRAG = "application/x-will-project";
+  const [dragging, setDragging] = useState(false);
+  const [over, setOver] = useState<string | null>(null);
+  const dropProps = (key: string, group: string | null) => ({
+    onDragOver: (e: React.DragEvent) => {
+      if (!e.dataTransfer.types.includes(DRAG)) return;
+      e.preventDefault(); // allows the drop
+      e.dataTransfer.dropEffect = "move";
+      setOver(key);
+    },
+    // leaving into a child card is not leaving the section
+    onDragLeave: (e: React.DragEvent) => !e.currentTarget.contains(e.relatedTarget as Node) && setOver(null),
+    onDrop: (e: React.DragEvent) => {
+      const path = e.dataTransfer.getData(DRAG);
+      setOver(null);
+      setDragging(false);
+      if (path) moveTo(path, group);
+    },
+  });
   const grouped = new Set(groups.flatMap((g) => g.repos));
   const sections = [
     ...groups.map((g) => ({ group: g, cards: cards.filter((c) => g.repos.includes(c.path)) })),
@@ -168,9 +188,16 @@ export function Dashboard({ repos, openTabs, onOpen, onPick, onForget }: Props) 
           </div>
         ) : (
           sections.map(({ group, cards: list }) =>
-            // the "no group" section only shows when there are groups or loose projects
-            !group && list.length === 0 ? null : (
-              <section key={group?.name ?? "__none"} className="flex flex-col gap-3">
+            // the "no group" section only shows when there are loose projects (or while dragging, as a target)
+            !group && list.length === 0 && !(dragging && groups.length) ? null : (
+              <section
+                key={group?.name ?? "__none"}
+                {...dropProps(group?.name ?? "__none", group?.name ?? null)}
+                className={cn(
+                  "-m-2 flex flex-col gap-3 rounded-xl p-2 transition-colors",
+                  over === (group?.name ?? "__none") && "bg-primary/10 ring-2 ring-primary/50",
+                )}
+              >
                 {(group || groups.length > 0) && (
                   <GroupHeader
                     name={group?.name ?? "Sem grupo"}
@@ -181,9 +208,9 @@ export function Dashboard({ repos, openTabs, onOpen, onPick, onForget }: Props) 
                     onFetchAll={group && list.length ? () => fetchAll(group) : undefined}
                   />
                 )}
-                {group && list.length === 0 && (
+                {list.length === 0 && (
                   <p className="rounded-lg border border-dashed p-4 text-center text-xs text-muted-foreground">
-                    Vazio. Clique com o botão direito num projeto para movê-lo para cá.
+                    {group ? "Vazio. Arraste um projeto para cá (ou botão direito, Mover para grupo)." : "Solte aqui para tirar do grupo."}
                   </p>
                 )}
                 <div className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-4">
@@ -192,7 +219,21 @@ export function Dashboard({ repos, openTabs, onOpen, onPick, onForget }: Props) 
                       <ContextMenuTrigger asChild>
                         {/* cards come in one after the other; layout: moving between groups glides */}
                         <motion.div layout {...enter(i)}>
-                          <ProjectCard card={c} open={openTabs.includes(c.path)} onOpen={() => onOpen(c.path)} onForget={() => onForget(c.path)} />
+                          {/* native HTML drag on a plain div: motion.div reserves onDragStart for its own gestures */}
+                          <div
+                            draggable
+                            onDragStart={(e) => {
+                              e.dataTransfer.setData(DRAG, c.path);
+                              e.dataTransfer.effectAllowed = "move";
+                              setDragging(true);
+                            }}
+                            onDragEnd={() => {
+                              setDragging(false);
+                              setOver(null);
+                            }}
+                          >
+                            <ProjectCard card={c} open={openTabs.includes(c.path)} onOpen={() => onOpen(c.path)} onForget={() => onForget(c.path)} />
+                          </div>
                         </motion.div>
                       </ContextMenuTrigger>
                       <ContextMenuContent>
