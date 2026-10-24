@@ -19,6 +19,16 @@ document.addEventListener("securitypolicyviolation", (e) => {
   console.error(`[CSP] ${v}`);
 });
 
+// The WebView's own menu (Voltar, Recarregar, Imprimir...) makes no sense in a desktop app.
+// Our menus (Radix ContextMenu) still open: they are handled in React before this listener.
+// Kept in text fields (copy/paste) and, in dev, with Shift held (for Inspecionar).
+document.addEventListener("contextmenu", (e) => {
+  const t = e.target as HTMLElement;
+  if (t.closest("input, textarea, [contenteditable=true], .xterm")) return;
+  if (import.meta.env.DEV && e.shiftKey) return;
+  e.preventDefault();
+});
+
 // Startup while the splash is on screen: check git, then mount the app.
 // Each view calls splashDone() once its first data is loaded.
 splashStep("Verificando o git", 0.2);
