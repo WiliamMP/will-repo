@@ -47,7 +47,7 @@ Precisa do [git](https://git-scm.com) instalado.
 
 ## Desenvolvimento
 
-Requisitos: [Node 22](https://nodejs.org), [Rust](https://rustup.rs) e git.
+Quer contribuir? Veja o [CONTRIBUTING.md](CONTRIBUTING.md). Requisitos: [Node 22](https://nodejs.org), [Rust](https://rustup.rs) e git.
 
 ```bash
 npm ci

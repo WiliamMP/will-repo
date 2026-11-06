@@ -50,5 +50,6 @@ Versão em três lugares: `package.json`, `src-tauri/Cargo.toml`, `src-tauri/tau
 ## Outros
 
 - Backlog em `docs/todo/README.md` (marque `[x]` ao terminar um item).
+- Mudanças para quem usa o app vão no `CHANGELOG.md` (seção "Não lançado"); o `/release` fecha a versão.
 - Registry shadcn "Neon" publicado no GitHub Pages pelo workflow *Registry* (`npm run registry` gera localmente).
 - `master` protegida contra push forçado e exclusão (push direto liberado).
