@@ -39,7 +39,7 @@ const registry = {
       name: "neon-theme",
       type: "registry:theme",
       title: "Neon",
-      description: "Tema Neon do will-repo: roxo neon, claro e escuro, cores extras (sucesso, aviso, diff, lanes) e brilho.",
+      description: "Tema Neon do will-repo: roxo neon, claro e escuro, cores extras (sucesso, aviso, diff, lanes) e brilho. Licença MIT.",
       cssVars: {
         theme: {
           "font-sans": "'Geist Variable', 'Segoe UI Variable', sans-serif",

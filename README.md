@@ -74,8 +74,12 @@ O tema e os componentes animados viram um registry do shadcn, publicado automati
 npx shadcn add https://wiliammp.github.io/will-repo/r/neon.json
 ```
 
+O tema Neon é **MIT**, diferente do resto do app: pode usar em qualquer projeto, aberto ou fechado, sem precisar abrir o código. Detalhes em [docs/LICENSE-NEON.md](docs/LICENSE-NEON.md).
+
 ## Licença
 
 [GPL-3.0](LICENSE). Em resumo: você pode usar, estudar, modificar e distribuir o will-repo à vontade, inclusive em forks. Quem distribuir uma versão, modificada ou não, precisa manter a mesma licença e publicar o código-fonte. Ou seja, ninguém pode pegar o will-repo e vender como produto fechado.
+
+Exceção: o [tema Neon](#tema-neon-em-outros-apps) é MIT ([docs/LICENSE-NEON.md](docs/LICENSE-NEON.md)).
 
 As versões até a 0.3.1 foram publicadas sob a licença MIT.
