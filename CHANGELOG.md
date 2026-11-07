@@ -5,6 +5,7 @@ Mudanças de cada versão. Formato baseado no [Keep a Changelog](https://keepach
 ## [Não lançado]
 
 ### Alterado
+- Licença trocada de MIT para GPL-3.0: forks continuam livres, mas precisam manter o código aberto.
 - Dependências atualizadas (Tauri 2.12, TypeScript 7, reqwest 0.13 e outras).
 
 ## [0.3.1] - 2026-10-24

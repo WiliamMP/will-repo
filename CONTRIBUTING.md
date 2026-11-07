@@ -67,4 +67,4 @@ No PR:
 2. Descreva o que mudou e por quê; se mexeu na interface, coloque um print ou GIF.
 3. Confira que o CI passou.
 
-Ao contribuir, você concorda que seu código é publicado sob a [licença MIT](LICENSE) do projeto.
+Ao contribuir, você concorda que seu código é publicado sob a [licença GPL-3.0](LICENSE) do projeto.

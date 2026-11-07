@@ -4,6 +4,12 @@ Cliente git para Windows, no estilo do Sourcetree, GitKraken e Fork, com tema **
 
 ![will-repo](docs/screenshot.png)
 
+## Sobre o projeto
+
+Fiz o will-repo para resolver problemas meus no dia a dia do trabalho e deixei disponível para ajudar outras pessoas. Ele foi feito com ajuda de IA ([Claude Code](https://claude.com/claude-code)).
+
+Não pretendo lucrar com ele: é gratuito e vai continuar open source. Quer modificar, fazer fork ou adaptar para o seu uso? Fique à vontade. Só não vale transformar em produto fechado para vender (veja [Licença](#licença)).
+
 ## Instalar
 
 Baixe o `will-repo_x.y.z_x64-setup.exe` na [última versão](https://github.com/WiliamMP/will-repo/releases/latest) e execute. Ele instala só para o seu usuário, sem pedir administrador. Depois disso, o app avisa sozinho quando sai uma versão nova.
@@ -70,4 +76,6 @@ npx shadcn add https://wiliammp.github.io/will-repo/r/neon.json
 
 ## Licença
 
-[MIT](LICENSE)
+[GPL-3.0](LICENSE). Em resumo: você pode usar, estudar, modificar e distribuir o will-repo à vontade, inclusive em forks. Quem distribuir uma versão, modificada ou não, precisa manter a mesma licença e publicar o código-fonte. Ou seja, ninguém pode pegar o will-repo e vender como produto fechado.
+
+As versões até a 0.3.1 foram publicadas sob a licença MIT.

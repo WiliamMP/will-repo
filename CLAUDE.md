@@ -1,6 +1,6 @@
 # will-repo
 
-Cliente git para Windows (estilo Sourcetree/GitKraken/Fork), tema **Neon**. Tauri 2 + Rust no backend, React 19 + TypeScript + shadcn/ui na interface. Repositório público, licença MIT.
+Cliente git para Windows (estilo Sourcetree/GitKraken/Fork), tema **Neon**. Tauri 2 + Rust no backend, React 19 + TypeScript + shadcn/ui na interface. Repositório público, licença GPL-3.0 (até a 0.3.1 era MIT).
 
 O dono vem do **Delphi** e está aprendendo Rust e React com este projeto: ao explicar código novo, dê uma analogia curta com Delphi/Pascal (ex.: `Result<T, E>` ≈ função que retorna valor ou levanta exceção; `invoke()` ≈ chamar função de uma DLL; hook React ≈ TDataModule/TActionList). Responda em **português**.
 
