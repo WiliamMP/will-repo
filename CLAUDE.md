@@ -1,6 +1,6 @@
 # will-repo
 
-Cliente git para Windows (estilo Sourcetree/GitKraken/Fork), tema **Neon**. Tauri 2 + Rust no backend, React 19 + TypeScript + shadcn/ui na interface. Repositório público, licença MIT.
+Cliente git para Windows (estilo Sourcetree/GitKraken/Fork), tema **Neon**. Tauri 2 + Rust no backend, React 19 + TypeScript + shadcn/ui na interface. Repositório público, licença GPL-3.0 (até a 0.3.1 era MIT).
 
 O dono vem do **Delphi** e está aprendendo Rust e React com este projeto: ao explicar código novo, dê uma analogia curta com Delphi/Pascal (ex.: `Result<T, E>` ≈ função que retorna valor ou levanta exceção; `invoke()` ≈ chamar função de uma DLL; hook React ≈ TDataModule/TActionList). Responda em **português**.
 
@@ -50,5 +50,6 @@ Versão em três lugares: `package.json`, `src-tauri/Cargo.toml`, `src-tauri/tau
 ## Outros
 
 - Backlog em `docs/todo/README.md` (marque `[x]` ao terminar um item).
-- Registry shadcn "Neon" publicado no GitHub Pages pelo workflow *Registry* (`npm run registry` gera localmente).
+- Mudanças para quem usa o app vão no `CHANGELOG.md` (seção "Não lançado"); o `/release` fecha a versão.
+- Registry shadcn "Neon" publicado no GitHub Pages pelo workflow *Registry* (`npm run registry` gera localmente). O tema Neon é **MIT** (`docs/LICENSE-NEON.md`), o resto do app é GPL-3.0.
 - `master` protegida contra push forçado e exclusão (push direto liberado).

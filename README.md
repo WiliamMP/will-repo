@@ -4,9 +4,17 @@ Cliente git para Windows, no estilo do Sourcetree, GitKraken e Fork, com tema **
 
 ![will-repo](docs/screenshot.png)
 
+## Sobre o projeto
+
+Fiz o will-repo para resolver problemas meus no dia a dia do trabalho e deixei disponível para ajudar outras pessoas. Ele foi feito com ajuda de IA ([Claude Code](https://claude.com/claude-code)).
+
+Não pretendo lucrar com ele: é gratuito e vai continuar open source. Quer modificar, fazer fork ou adaptar para o seu uso? Fique à vontade. Só não vale transformar em produto fechado para vender (veja [Licença](#licença)).
+
 ## Instalar
 
 Baixe o `will-repo_x.y.z_x64-setup.exe` na [última versão](https://github.com/WiliamMP/will-repo/releases/latest) e execute. Ele instala só para o seu usuário, sem pedir administrador. Depois disso, o app avisa sozinho quando sai uma versão nova.
+
+> **O will-repo é gratuito e sempre vai ser.** O único lugar oficial para baixar é a página de [Releases](https://github.com/WiliamMP/will-repo/releases) deste repositório. Se alguém cobrou por ele, ou se você encontrou com outro nome num site de downloads, é cópia e você foi enganado. Avise abrindo uma [issue](https://github.com/WiliamMP/will-repo/issues).
 
 > O instalador não tem assinatura de código (certificado pago), então o Windows SmartScreen pode avisar na primeira vez: **Mais informações → Executar assim mesmo**.
 
@@ -47,7 +55,7 @@ Precisa do [git](https://git-scm.com) instalado.
 
 ## Desenvolvimento
 
-Requisitos: [Node 22](https://nodejs.org), [Rust](https://rustup.rs) e git.
+Quer contribuir? Veja o [CONTRIBUTING.md](CONTRIBUTING.md). Requisitos: [Node 22](https://nodejs.org), [Rust](https://rustup.rs) e git.
 
 ```bash
 npm ci
@@ -68,6 +76,12 @@ O tema e os componentes animados viram um registry do shadcn, publicado automati
 npx shadcn add https://wiliammp.github.io/will-repo/r/neon.json
 ```
 
+O tema Neon é **MIT**, diferente do resto do app: pode usar em qualquer projeto, aberto ou fechado, sem precisar abrir o código. Detalhes em [docs/LICENSE-NEON.md](docs/LICENSE-NEON.md).
+
 ## Licença
 
-[MIT](LICENSE)
+[GPL-3.0](LICENSE). Em resumo: você pode usar, estudar, modificar e distribuir o will-repo à vontade, inclusive em forks. Quem distribuir uma versão, modificada ou não, precisa manter a mesma licença e publicar o código-fonte. Ou seja, ninguém pode pegar o will-repo e vender como produto fechado.
+
+Exceção: o [tema Neon](#tema-neon-em-outros-apps) é MIT ([docs/LICENSE-NEON.md](docs/LICENSE-NEON.md)).
+
+As versões até a 0.3.1 foram publicadas sob a licença MIT.

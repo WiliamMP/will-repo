@@ -1,0 +1,51 @@
+name: Bug
+description: Algo não funciona como deveria
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: O que aconteceu
+      description: O que você esperava e o que aconteceu de fato. Print ou GIF ajudam muito.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Passos para reproduzir
+      placeholder: |
+        1. Abrir um repositório com ...
+        2. Clicar em ...
+        3. ...
+    validations:
+      required: true
+  - type: input
+    id: app-version
+    attributes:
+      label: Versão do will-repo
+      description: Configurações (Ctrl+,) > Sobre
+      placeholder: "0.3.1"
+    validations:
+      required: true
+  - type: input
+    id: windows
+    attributes:
+      label: Versão do Windows
+      description: "Rode `winver`"
+      placeholder: "Windows 11 24H2"
+    validations:
+      required: true
+  - type: input
+    id: git
+    attributes:
+      label: Versão do git
+      description: "Rode `git --version`"
+      placeholder: "git version 2.51.0.windows.1"
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Mensagem de erro ou log
+      description: Se apareceu algum erro, cole aqui.
+      render: text
