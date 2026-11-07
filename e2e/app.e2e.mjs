@@ -32,7 +32,13 @@ describe("will-repo", () => {
     await mainWindow();
   });
 
-  after(() => rmSync(repo, { recursive: true, force: true }));
+  after(() => {
+    // the app is still running here and may hold the folder open (EBUSY on Windows);
+    // a leftover temp folder is harmless, so cleanup must not fail the suite
+    try {
+      rmSync(repo, { recursive: true, force: true });
+    } catch {}
+  });
 
   it("abre no dashboard depois da splash", async () => {
     await expect($("h2=Projetos")).toBeDisplayed();
