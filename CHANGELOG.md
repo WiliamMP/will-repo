@@ -4,6 +4,8 @@ Mudanças de cada versão. Formato baseado no [Keep a Changelog](https://keepach
 
 ## [Não lançado]
 
+## [0.4.0] - 2026-11-06
+
 ### Adicionado
 - Aviso na tela Sobre e no README: o will-repo é gratuito e só é baixado oficialmente pelos Releases do GitHub.
 
@@ -52,7 +54,8 @@ Primeira versão pública.
 - Paleta de comandos (Ctrl+K), configurações (Ctrl+,), fetch automático, links de issues.
 - Instalador Windows e atualização automática pelos Releases.
 
-[Não lançado]: https://github.com/WiliamMP/will-repo/compare/v0.3.1...HEAD
+[Não lançado]: https://github.com/WiliamMP/will-repo/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/WiliamMP/will-repo/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/WiliamMP/will-repo/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/WiliamMP/will-repo/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/WiliamMP/will-repo/releases/tag/v0.2.0
