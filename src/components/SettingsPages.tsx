@@ -15,6 +15,7 @@ import {
   Plus,
   RefreshCw,
   RotateCcw,
+  Scale,
   Sun,
   Trash2,
   UserRound,
@@ -176,10 +177,11 @@ export const PAGES: Page[] = [
     group: "Sistema",
     sections: [
       { id: "version", title: "Versão" },
+      { id: "license", title: "Licença" },
       { id: "update", title: "Atualizações" },
       { id: "reset", title: "Restaurar" },
     ],
-    keywords: "versão tauri restaurar padrão resetar",
+    keywords: "versão tauri restaurar padrão resetar licença gpl gratuito open source código",
     render: () => <AboutPage />,
   },
 ];
@@ -922,6 +924,29 @@ function AboutPage() {
             <Github /> Repositório
           </Button>
         </div>
+      </Section>
+      {/* GPL-3.0 section 5(d): interactive UIs must show the copyright, the no-warranty
+          notice and where to get the license; forks have to keep this visible */}
+      <Section id="license" title="Licença">
+        <Row
+          label="Gratuito e open source"
+          description={
+            <>
+              O will-repo é gratuito, sob a licença GPL-3.0. <strong>Se você pagou por ele, foi enganado:</strong> a
+              versão oficial é baixada de graça em github.com/WiliamMP/will-repo.
+              <br />
+              Copyright © 2026 Wiliam Patricio. Sem nenhuma garantia; veja os termos na licença.
+            </>
+          }
+        >
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => openUrl("https://github.com/WiliamMP/will-repo/blob/master/LICENSE")}
+          >
+            <Scale /> Ver licença
+          </Button>
+        </Row>
       </Section>
       <Section id="update" title="Atualizações">
         <Row label="Procurar atualizações" description="O app também procura sozinho alguns segundos depois de abrir. Versões novas vêm dos Releases do will-repo no GitHub, assinadas.">

@@ -4,6 +4,9 @@ Mudanças de cada versão. Formato baseado no [Keep a Changelog](https://keepach
 
 ## [Não lançado]
 
+### Adicionado
+- Aviso na tela Sobre e no README: o will-repo é gratuito e só é baixado oficialmente pelos Releases do GitHub.
+
 ### Alterado
 - Licença trocada de MIT para GPL-3.0: forks continuam livres, mas precisam manter o código aberto.
 - Dependências atualizadas (Tauri 2.12, TypeScript 7, reqwest 0.13 e outras).
